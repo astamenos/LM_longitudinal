@@ -46,7 +46,36 @@ df <- lm_df %>%
   
 
 # Missingness analysis
+pivot <- df %>%
+  select(district_nces_id, week, learning_modality) %>%
+  pivot_wider(id_cols = district_nces_id, 
+              names_from = week, values_from = learning_modality) %>%
+  pivot_longer(!district_nces_id, names_to = 'week', values_to = 'is_missing') %>%
+  mutate(is_missing = if_else(is.na(is_missing), 1, 0))
 
+ggplot(pivot) + 
+  geom_tile(aes(x = week, y = district_nces_id, fill = as.factor(is_missing))) +
+  scale_fill_manual(values = c('beige','darkred')) +
+  theme(
+    axis.text.x = element_blank(), # Remove x axis labels
+    axis.ticks.y = element_blank(), # Remove y axis ticks
+    axis.text.y = element_blank()  # Remove y axis labels
+  ) +
+  labs(x = 'Week', y = 'District', title = 'Visualization of Missingness by District and Week')
+
+missingness <- pivot %>%
+  group_by(district_nces_id) %>%
+  summarise(pct_missing = 100 *mean(is_missing))
+
+# Distribution of data missingness
+ggplot(missingness) +
+  geom_histogram(aes(x = pct_missing),
+                 color = 'black',
+                 fill = 'darkred',
+                 alpha = 0.7,
+                 bins = 10) +
+  labs(x = '% of Data Missing', y = 'Number of Districts', 
+       title = 'Distribution of Data Missingness')
 
 # Charts
 national <- df %>%
@@ -57,6 +86,7 @@ regional <- df %>%
   group_by(region, week) %>%
   summarise(pct_disrupted = 100 * mean(learning_modality))
 
+#
 ggplot(national) + 
   geom_line(aes(x = week, y = pct_disrupted)) + 
   geom_point(aes(x = week, y = pct_disrupted)) +
@@ -69,7 +99,13 @@ ggplot(regional) +
   labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
        title = '% of Districts in Hybrid or Remote over Time')
 
-# Model
+complete_districts <- missingness[missingness$pct_missing == 0, 'district_nces_id']
+
+# Model 1
 model1 <- glm(learning_modality ~ time + region, data = df, family = 'binomial')
 summary(model1)
+
+# Model 2
+model2 <- glm(learning_modality ~ time + region, data = df[complete_districts$district_nces_id, ], family = 'binomial')
+summary(model2)
 
