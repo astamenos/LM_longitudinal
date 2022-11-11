@@ -1,24 +1,43 @@
 # Import libraries
 library(tidyverse)
+library(lubridate)
 
 # Function to download data from HealthData.gov
-get_data <- function(identifier, limit = 50000, offset = 0, time_var) {
+get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) {
   require(jsonlite)
   
-  URL <- sprintf('https://healthdata.gov/resource/%s.json', identifier)
-  parameters <- sprintf("?$order=:id&$limit=%s&$offset=%s&$where=%s between '2021-08-01' and '2022-06-01'",
-                        limit, offset, time_var)
+  URL <- sprintf('https://%s/resource/%s.json', domain, identifier)
+  parameters <- sprintf("?$order=:id&$limit=%s&$offset=%s&$where=%s",
+                        limit, offset, date_query)
   data <- read_json(paste(URL, parameters, sep = ''), simplifyVector = TRUE)
   
   return(data)
 }
 
-# Grab the first 90000 rows and dataset schema
-lm_df <- get_data('aitj-yx37', limit = 90000, offset = 0, time_var = 'week')
+# Grab epidemiologic data
+epi_df <- get_data('data.cdc.gov', '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
+
+# Transforming the epidemiologic data
+epi_df <- epi_df %>%
+  select(submission_date, state, new_case, new_death) %>%
+  mutate(submission_date = as.Date(submission_date),
+         new_case = as.numeric(new_case),
+         new_death = as.numeric(new_death)) 
+
+# Aggregating the epi data by week
+weekly <- epi_df %>% 
+  group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
+  summarise_if(is.numeric, sum) %>%
+  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w'))
+
+# Grab the first 90000 rows and dataset schema for the learning modality data
+lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
+                  date_query = "week between '2021-08-01' and '2022-06-01'")
 
 # Load remaining data, 90000 rows at a time
 for(i in 1:6) {
-  batch <- get_data('aitj-yx37', limit = 90000, offset = 90000*i, time_var = 'week')
+  batch <- get_data('aitj-yx37', limit = 90000, offset = 90000*i, 
+                    date_query = "week between '2021-08-01' and '2022-06-01'")
   lm_df <- bind_rows(lm_df, batch)
   rm(batch)
   Sys.sleep(10)
@@ -43,7 +62,6 @@ df <- lm_df %>%
                             state %in% midwest ~ 'midwest',
                             state %in% south ~ 'south',
                             state %in% west ~ 'west')))
-  
 
 # Missingness analysis
 pivot <- df %>%
@@ -99,13 +117,13 @@ ggplot(regional) +
   labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
        title = '% of Districts in Hybrid or Remote over Time')
 
-complete_districts <- missingness[missingness$pct_missing == 0, 'district_nces_id']
+complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
-model1 <- glm(learning_modality ~ time + region, data = df, family = 'binomial')
+model1 <- glm(learning_modality ~ time + time^2 + region, data = df, family = 'binomial')
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ time + region, data = df[complete_districts$district_nces_id, ], family = 'binomial')
+model2 <- glm(learning_modality ~ time + time^2 + region, data = df[df$district_nces_id %in% complete_districts, ], family = 'binomial')
 summary(model2)
 

@@ -11,3 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be underreporting of "remote" and "hybrid" learning modalities.
+
+# References
+
+* https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36
+
