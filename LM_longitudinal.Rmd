@@ -9,3 +9,5 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be underreporting of "remote" and "hybrid" learning modalities.
