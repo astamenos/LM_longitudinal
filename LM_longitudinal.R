@@ -17,18 +17,15 @@ get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) 
 # Grab epidemiologic data
 epi_df <- get_data('data.cdc.gov', '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
 
-# Transforming the epidemiologic data
+# Transforming the epidemiologic data and aggregating by week
 epi_df <- epi_df %>%
   select(submission_date, state, new_case, new_death) %>%
   mutate(submission_date = as.Date(submission_date),
          new_case = as.numeric(new_case),
-         new_death = as.numeric(new_death)) 
-
-# Aggregating the epi data by week
-weekly <- epi_df %>% 
+         new_death = as.numeric(new_death)) %>%
   group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
   summarise_if(is.numeric, sum) %>%
-  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w'))
+  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7))
 
 # Grab the first 90000 rows and dataset schema for the learning modality data
 lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
@@ -50,7 +47,7 @@ south <- c('DE', 'DC', 'FL', 'GA', 'MD', 'NC', 'SC', 'VA', 'WV', 'AL', 'KY', 'MS
            'TN', 'AR', 'LA', 'OK', 'TX')
 west <- c('AZ', 'CO', 'ID', 'NM', 'MT', 'UT', 'NV', 'WY', 'AK', 'CA', 'HI', 'OR', 'WA')
 
-# Transform the data
+# Transform the learning modality data
 df <- lm_df %>%
   filter(state != 'BI' & state != 'PR') %>%
   mutate(learning_modality = ifelse(learning_modality == 'In Person', 0, 1),
@@ -61,7 +58,8 @@ df <- lm_df %>%
          region = as.factor(case_when(state %in% northeast ~ 'northeast',
                             state %in% midwest ~ 'midwest',
                             state %in% south ~ 'south',
-                            state %in% west ~ 'west')))
+                            state %in% west ~ 'west'))) %>%
+  left_join(epi_df, by = c('state' = 'state', 'week' = 'date'))
 
 # Missingness analysis
 pivot <- df %>%
@@ -120,10 +118,11 @@ ggplot(regional) +
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
-model1 <- glm(learning_modality ~ time + time^2 + region, data = df, family = 'binomial')
+model1 <- glm(learning_modality ~ time + time^2 + region + new_case + new_death, data = df, family = 'binomial')
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ time + time^2 + region, data = df[df$district_nces_id %in% complete_districts, ], family = 'binomial')
+model2 <- glm(learning_modality ~ time + time^2 + region + new_case + new_death, data = df[df$district_nces_id %in% complete_districts, ], family = 'binomial')
 summary(model2)
 
+ggplot() + geom_line(aes(x = df$week, y = model1$fitted.values, color = df$region))
