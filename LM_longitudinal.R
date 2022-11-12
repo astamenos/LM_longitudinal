@@ -20,12 +20,6 @@ inv.logit <- function(x) {
   return(exp(x)/(1 + exp(x)))
 }
 
-# Omicron visualization
-rect <- data.frame(xmin = as.Date('2021-12-01', ), 
-                   xmax = as.Date('2022-02-01'), 
-                   ymin = -Inf, 
-                   ymax = Inf)
-
 # Grab epidemiologic data
 epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
 
@@ -64,7 +58,7 @@ west <- c('AZ', 'CO', 'ID', 'NM', 'MT', 'UT', 'NV', 'WY', 'AK', 'CA', 'HI', 'OR'
 # Transform the learning modality data
 df <- lm_df %>%
   filter(state != 'BI' & state != 'PR') %>%
-  mutate(learning_modality = ifelse(learning_modality == 'In Person', 0, 1),
+  mutate(learning_modality = if_else(learning_modality == 'In Person', 0, 1),
          week = as.Date(week),
          time = as.numeric(week - min(week)),
          operational_schools = as.integer(operational_schools),
@@ -153,7 +147,8 @@ epi_regional <- epi_df %>%
             deaths = sum(new_death),
             avg_cases = mean(new_case),
             avg_deaths = mean(new_death)) %>%
-  mutate(time = as.numeric(date - min(date)))
+  mutate(date = as.Date(date),
+         time = as.numeric(date - min(date)))
 
 # Epi curves
 ggplot(epi_regional) + 
@@ -186,10 +181,9 @@ summary(model2)
 gammas <- model2$coefficients
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 20), 
+model3 <- glm(learning_modality ~ region + ns(time, df = 5) + region:ns(time, df = 5), 
               data = df, family = binomial())
 summary(model3)
-
 
 week_grid <- sort(unique(df$week))
 time_grid <- sort(unique(df$time))
@@ -205,8 +199,7 @@ model2_probs <- model2_probs %>%
   
 
 model_comparisons <- epi_regional %>%
-  mutate(date = as.Date(date),
-         model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
+  mutate(model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
                                                                           as.numeric(betas[5])*avg_cases),
                                   region == 'northeast' ~ 100 * inv.logit(sum(betas[c(1, 2)]) + 
                                                                             sum(betas[c(5, 6)])*avg_cases),
