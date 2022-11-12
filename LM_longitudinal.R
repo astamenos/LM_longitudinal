@@ -24,7 +24,8 @@ epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submi
 
 # Transforming the epidemiologic data and aggregating by week
 epi_df <- epi_df %>%
-  filter(state != 'PR') %>%
+  filter(state != 'PR' & state != 'FSM' & state != 'GU' & state != 'MP' & state != 'AS'
+         & state != 'NYC' & state != 'PW' & state != 'RMI' & state != 'VI') %>%
   select(submission_date, state, new_case, new_death) %>%
   mutate(submission_date = as.Date(submission_date),
          new_case = as.numeric(new_case),
