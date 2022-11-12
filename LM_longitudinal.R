@@ -132,7 +132,9 @@ epi_regional <- epi_df %>%
                                       state %in% west ~ 'west'))) %>%
   group_by(region, date) %>%
   summarise(cases = sum(new_case),
-            deaths = sum(new_death))
+            deaths = sum(new_death),
+            avg_cases = mean(new_case),
+            avg_deaths = mean(new_death))
 
 # Epi curves
 ggplot(epi_regional) + geom_line(aes(x = date, y = cases, color = region))
@@ -153,7 +155,7 @@ gammas <- model2$coefficients
 
 week_grid <- sort(unique(df$week))
 time_grid <- sort(unique(df$time))
-cases_grid <- 0:max(epi_regional$cases)
+cases_grid <- sort(unique(epi_regional$avg_cases))
 
 model1_probs <- data.frame(cases_grid, 
                    midwest = 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
@@ -179,9 +181,19 @@ model1_probs <- model1_probs %>%
 
 model2_probs <- model2_probs %>%
   pivot_longer(!week_grid, names_to = 'region', values_to = 'model2_probs')
+  
 
 model_comparisons <- epi_regional %>%
-  left_join(model1_probs, by = c('region' = 'region', 'cases' = 'cases_grid')) %>%
+  mutate(model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
+                                                                          as.numeric(betas[5])*avg_cases),
+                                  region == 'northeast' ~ 100 * inv.logit(sum(betas[c(1, 2)]) + 
+                                                                            sum(betas[c(5, 6)])*avg_cases),
+                                  region == 'south' ~ 100 * inv.logit(sum(betas[c(1, 3)]) + 
+                                                                        sum(betas[c(5, 7)])*avg_cases),
+                                  region == 'west' ~ 100 * inv.logit(sum(betas[c(1, 4)]) + 
+                                                                       sum(betas[c(5, 8)])*avg_cases)
+                                  
+  )) %>%
   left_join(model2_probs, by = c('region' = 'region', 'date' = 'week_grid')) %>%
   left_join(regional, by = c('date' = 'week', 'region' = 'region'))
 
