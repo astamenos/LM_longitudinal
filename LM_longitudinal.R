@@ -157,8 +157,10 @@ summary(model2)
 gammas <- model2$coefficients
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 8), data = df, family = binomial())
+model3 <- glm(learning_modality ~ region + ns(time, df = 10) + region*ns(time, df = 10), 
+              data = df, family = binomial())
 summary(model3)
+
 
 week_grid <- sort(unique(df$week))
 time_grid <- sort(unique(df$time))
@@ -189,15 +191,34 @@ model_comparisons <- epi_regional %>%
 
 model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
 
-ggplot(model_comparisons) + 
-  geom_line(aes(x = date, y = model1_probs, color = region)) +
-  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
+region_viz <- function(y, linesize = 1, pointsize = 2, 
+                       colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {
+  ggplot(model_comparisons) + 
+    geom_line(aes(x = date, y = !!ensym(y), color = region), size = linesize) +
+    geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region), size = pointsize) +
+    scale_color_manual(values = colors) +
+    labs(x = 'Date', y = 'Probability of Disruption (%)', 
+         title = sprintf('%s Estimated Probability of School Disruption by Region', 
+                         str_to_title(strsplit(y, '_')[[1]][1])))
+  
+}
 
-ggplot(model_comparisons) + 
-  geom_line(aes(x = date, y = model2_probs, color = region)) +
-  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
+region_viz('model1_probs')
+region_viz('model2_probs')
+region_viz('model3_probs')
 
-ggplot(model_comparisons) + 
-  geom_line(aes(x = date, y = model3_probs, color = region)) +
-  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
+model_viz <- function(region, size = 1.1) {
+  ggplot(model_comparisons[model_comparisons$region == region,]) +
+    geom_line(aes(x = date, y = model1_probs, linetype = 'Model 1', color = 'Model 1'), size = size) +
+    geom_line(aes(x = date, y = model2_probs, linetype = 'Model 2', color = 'Model 2'), size = size) +
+    geom_line(aes(x = date, y = model3_probs, linetype = 'Model 3', color = 'Model 3'), size = size) +
+    geom_point(aes(x = date, y = pct_disrupted)) +
+    labs(x = 'Date', y = 'Probability of Disruption', 
+         title = sprintf('%s: Observed and Estimated Probability of School Disruption', str_to_sentence(region)),
+         linetype = 'Legend', color = 'Legend')
+}
 
+model_viz('west')
+model_viz('midwest')
+model_viz('northeast')
+model_viz('south')
