@@ -147,7 +147,7 @@ summary(model1)
 betas <- model1$coefficients
 
 # Model 2
-model2 <- glm(learning_modality ~ region + time + I(time^2), data = df, family = 'binomial')
+model2 <- glm(learning_modality ~ region + time + I(time^2) + region * time, data = df, family = 'binomial')
 summary(model2)
 gammas <- model2$coefficients
 
@@ -164,9 +164,9 @@ model1_probs <- data.frame(cases_grid,
 
 model2_probs <- data.frame(week_grid,
                   midwest = 100 * inv.logit(gammas[1:4] %*% c(1, 0, 0, 0) + gammas[5]*time_grid + gammas[6]*time_grid^2),
-                  northeast = 100 * inv.logit(sum(gammas[c(1, 2)]) + gammas[5]*time_grid + gammas[6]*time_grid^2),
-                  south = 100 * inv.logit(sum(gammas[c(1, 3)]) + gammas[5]*time_grid + gammas[6]*time_grid^2),
-                  west = 100 * inv.logit(sum(gammas[c(1, 4)]) + gammas[5]*time_grid + gammas[6]*time_grid^2))
+                  northeast = 100 * inv.logit(sum(gammas[c(1, 2)]) + sum(gammas[c(5, 7)])*time_grid + gammas[6]*time_grid^2),
+                  south = 100 * inv.logit(sum(gammas[c(1, 3)]) + sum(gammas[c(5, 8)])*time_grid + gammas[6]*time_grid^2),
+                  west = 100 * inv.logit(sum(gammas[c(1, 4)]) + sum(gammas[c(5, 9)])*time_grid + gammas[6]*time_grid^2))
 
 ggplot(model1_probs) + 
   geom_line(aes(x = cases_grid, y = south)) +
@@ -187,11 +187,11 @@ model_comparisons <- epi_regional %>%
 
 ggplot(model_comparisons) + 
   geom_line(aes(x = date, y = model1_probs, color = region)) +
-  geom_point(aes(x = date, y = pct_disrupted, color = region))
+  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
 
 ggplot(model_comparisons) + 
   geom_line(aes(x = date, y = model2_probs, color = region)) +
-  geom_point(aes(x = date, y = pct_disrupted, color = region))
+  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
 
 mod <- lm(learning_modality ~ new_case, data = df)
 summary(mod)
