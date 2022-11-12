@@ -17,4 +17,6 @@ Unperceived characteristics in different Census regions (e.g., political ideolog
 # References
 
 * https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36
+* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4241048/
+* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3016756/
 

@@ -135,7 +135,9 @@ epi_regional <- epi_df %>%
   summarise(cases = sum(new_case),
             deaths = sum(new_death),
             avg_cases = mean(new_case),
-            avg_deaths = mean(new_death))
+            avg_deaths = mean(new_death)) %>%
+  mutate(date = as.Date(date),
+         time = as.numeric(date - min(date)))
 
 # Epi curves
 ggplot(epi_regional) + geom_line(aes(x = date, y = cases, color = region))
@@ -154,31 +156,18 @@ model2 <- glm(learning_modality ~ region + time + I(time^2) + region * time, dat
 summary(model2)
 gammas <- model2$coefficients
 
+# Model 3
+model3 <- glm(learning_modality ~ region + ns(time, df = 8), data = df, family = binomial())
+summary(model3)
+
 week_grid <- sort(unique(df$week))
 time_grid <- sort(unique(df$time))
-cases_grid <- sort(unique(epi_regional$avg_cases))
-
-model1_probs <- data.frame(cases_grid, 
-                   midwest = 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
-                                               as.numeric(betas[5])*cases_grid),
-                   northeast = 100 * inv.logit(sum(betas[c(1, 2)]) + sum(betas[c(5, 6)])*cases_grid),
-                   south = 100 * inv.logit(sum(betas[c(1, 3)]) + sum(betas[c(5, 7)])*cases_grid),
-                   west = 100 * inv.logit(sum(betas[c(1, 4)]) + sum(betas[c(5, 8)])*cases_grid))
 
 model2_probs <- data.frame(week_grid,
                   midwest = 100 * inv.logit(gammas[1:4] %*% c(1, 0, 0, 0) + gammas[5]*time_grid + gammas[6]*time_grid^2),
                   northeast = 100 * inv.logit(sum(gammas[c(1, 2)]) + sum(gammas[c(5, 7)])*time_grid + gammas[6]*time_grid^2),
                   south = 100 * inv.logit(sum(gammas[c(1, 3)]) + sum(gammas[c(5, 8)])*time_grid + gammas[6]*time_grid^2),
                   west = 100 * inv.logit(sum(gammas[c(1, 4)]) + sum(gammas[c(5, 9)])*time_grid + gammas[6]*time_grid^2))
-
-ggplot(model1_probs) + 
-  geom_line(aes(x = cases_grid, y = south)) +
-  geom_line(aes(x = cases_grid, y = midwest)) +
-  geom_line(aes(x = cases_grid, y = west)) +
-  geom_line(aes(x = cases_grid, y = northeast))
-
-model1_probs <- model1_probs %>%
-  pivot_longer(!cases_grid, names_to = 'region', values_to = 'model1_probs')
 
 model2_probs <- model2_probs %>%
   pivot_longer(!week_grid, names_to = 'region', values_to = 'model2_probs')
@@ -198,6 +187,8 @@ model_comparisons <- epi_regional %>%
   left_join(model2_probs, by = c('region' = 'region', 'date' = 'week_grid')) %>%
   left_join(regional, by = c('date' = 'week', 'region' = 'region'))
 
+model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
+
 ggplot(model_comparisons) + 
   geom_line(aes(x = date, y = model1_probs, color = region)) +
   geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
@@ -206,5 +197,7 @@ ggplot(model_comparisons) +
   geom_line(aes(x = date, y = model2_probs, color = region)) +
   geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
 
-mod <- lm(learning_modality ~ new_case, data = df)
-summary(mod)
+ggplot(model_comparisons) + 
+  geom_line(aes(x = date, y = model3_probs, color = region)) +
+  geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region))
+
