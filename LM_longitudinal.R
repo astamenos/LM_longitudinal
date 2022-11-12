@@ -20,10 +20,11 @@ inv.logit <- function(x) {
 }
 
 # Grab epidemiologic data
-epi_df <- get_data('data.cdc.gov', '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
+epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
 
 # Transforming the epidemiologic data and aggregating by week
 epi_df <- epi_df %>%
+  filter(state != 'PR') %>%
   select(submission_date, state, new_case, new_death) %>%
   mutate(submission_date = as.Date(submission_date),
          new_case = as.numeric(new_case),
@@ -38,7 +39,7 @@ lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0,
 
 # Load remaining data, 90000 rows at a time
 for(i in 1:6) {
-  batch <- get_data('aitj-yx37', limit = 90000, offset = 90000*i, 
+  batch <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 90000*i, 
                     date_query = "week between '2021-08-01' and '2022-06-01'")
   lm_df <- bind_rows(lm_df, batch)
   rm(batch)
@@ -67,7 +68,7 @@ df <- lm_df %>%
   left_join(epi_df, by = c('state' = 'state', 'week' = 'date')) %>%
   select(district_nces_id, district_name, week, learning_modality,
          operational_schools, student_count, city, state, zip_code, time, 
-         region = region.x, new_case, new_death)
+         region, new_case, new_death)
 
 # Missingness analysis
 pivot <- df %>%
@@ -141,25 +142,39 @@ ggplot(epi_regional) + geom_line(aes(x = date, y = deaths, color = region))
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
-model1 <- glm(learning_modality ~ time + time^2 + region + new_case + new_death, data = df, family = 'binomial')
+model1 <- glm(learning_modality ~ region + region*new_case, data = df, family = 'binomial')
 summary(model1)
+betas <- model1$coefficients
 
 # Model 2
 model2 <- glm(learning_modality ~ region + time + I(time^2) + region*time, data = df, family = 'binomial')
 summary(model2)
+gammas <- model2$coefficients
 
 week_grid <- sort(unique(df$week))
 time_grid <- sort(unique(df$time))
+cases_grid <- 0:max(epi_regional$cases)
 
-temp <- data.frame(week = week_grid, 
-                   south = 100 * inv.logit(model2$coefficients[-c(5, 6)] %*% c(1, 0, 1, 0, 0, 1, 0) + c(model2$coefficients[5])*time_grid + c(model2$coefficients[6])*time_grid^2),
-                   midwest = 100 * inv.logit(model2$coefficients[-c(5, 6)] %*% c(1, 0, 0, 0, 0, 0, 0) + c(model2$coefficients[5])*time_grid + c(model2$coefficients[6])*time_grid^2))
+model1_probs <- data.frame(cases_grid, 
+                   midwest = 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
+                                               as.numeric(betas[5])*cases_grid),
+                   northeast = 100 * inv.logit(sum(betas[c(1, 2)]) + sum(betas[c(5, 6)])*cases_grid),
+                   south = 100 * inv.logit(sum(betas[c(1, 3)]) + sum(betas[c(5, 7)])*cases_grid),
+                   west = 100 * inv.logit(sum(betas[c(1, 4)]) + sum(betas[c(5, 8)])*cases_grid))
 
-ggplot(temp) + 
-  geom_line(aes(x = week, y = south)) +
-  geom_line(aes(x = week, y = midwest)) +
-  geom_line(aes(x = week, y = west)) +
-  geom_line(aes(x = week, y = northeast))
+ggplot(model1_probs) + 
+  geom_line(aes(x = cases_grid, y = south)) +
+  geom_line(aes(x = cases_grid, y = midwest)) +
+  geom_line(aes(x = cases_grid, y = west)) +
+  geom_line(aes(x = cases_grid, y = northeast))
+
+model1_probs <- model1_probs %>%
+  pivot_longer(!cases_grid, names_to = 'region', values_to = 'model1_probs')
+
+model_comparisons <- epi_regional %>%
+  left_join(model1_probs, by = c('region' = 'region', 'cases' = 'cases_grid'))
+
+ggplot(model_comparisons) + geom_line(aes(x = date, y = model1_probs, color = region))
 
 mod <- lm(learning_modality ~ new_case, data = df)
 summary(mod)
