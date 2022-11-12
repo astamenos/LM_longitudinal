@@ -14,6 +14,11 @@ get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) 
   return(data)
 }
 
+# Inverse logit function
+inv.logit <- function(x) {
+  return(exp(x)/(1 + exp(x)))
+}
+
 # Grab epidemiologic data
 epi_df <- get_data('data.cdc.gov', '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
 
@@ -52,14 +57,17 @@ df <- lm_df %>%
   filter(state != 'BI' & state != 'PR') %>%
   mutate(learning_modality = ifelse(learning_modality == 'In Person', 0, 1),
          week = as.Date(week),
-         time = week - min(week),
+         time = as.numeric(week - min(week)),
          operational_schools = as.integer(operational_schools),
          student_count = as.integer(student_count),
          region = as.factor(case_when(state %in% northeast ~ 'northeast',
                             state %in% midwest ~ 'midwest',
                             state %in% south ~ 'south',
                             state %in% west ~ 'west'))) %>%
-  left_join(epi_df, by = c('state' = 'state', 'week' = 'date'))
+  left_join(epi_df, by = c('state' = 'state', 'week' = 'date')) %>%
+  select(district_nces_id, district_name, week, learning_modality,
+         operational_schools, student_count, city, state, zip_code, time, 
+         region = region.x, new_case, new_death)
 
 # Missingness analysis
 pivot <- df %>%
@@ -93,7 +101,7 @@ ggplot(missingness) +
   labs(x = '% of Data Missing', y = 'Number of Districts', 
        title = 'Distribution of Data Missingness')
 
-# Charts
+# Aggregating by school data
 national <- df %>%
   group_by(week) %>%
   summarise(pct_disrupted = 100 * mean(learning_modality))
@@ -115,6 +123,21 @@ ggplot(regional) +
   labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
        title = '% of Districts in Hybrid or Remote over Time')
 
+# Aggregating the epidemiologic data
+epi_regional <- epi_df %>%
+  mutate(region = as.factor(case_when(state %in% northeast ~ 'northeast',
+                                      state %in% midwest ~ 'midwest',
+                                      state %in% south ~ 'south',
+                                      state %in% west ~ 'west'))) %>%
+  group_by(region, date) %>%
+  summarise(cases = sum(new_case),
+            deaths = sum(new_death))
+
+# Epi curves
+ggplot(epi_regional) + geom_line(aes(x = date, y = cases, color = region))
+ggplot(epi_regional) + geom_line(aes(x = date, y = deaths, color = region))
+
+# Districts with no missing data
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
@@ -122,7 +145,21 @@ model1 <- glm(learning_modality ~ time + time^2 + region + new_case + new_death,
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ time + time^2 + region + new_case + new_death, data = df[df$district_nces_id %in% complete_districts, ], family = 'binomial')
+model2 <- glm(learning_modality ~ region + time + I(time^2) + region*time, data = df, family = 'binomial')
 summary(model2)
 
-ggplot() + geom_line(aes(x = df$week, y = model1$fitted.values, color = df$region))
+week_grid <- sort(unique(df$week))
+time_grid <- sort(unique(df$time))
+
+temp <- data.frame(week = week_grid, 
+                   south = 100 * inv.logit(model2$coefficients[-c(5, 6)] %*% c(1, 0, 1, 0, 0, 1, 0) + c(model2$coefficients[5])*time_grid + c(model2$coefficients[6])*time_grid^2),
+                   midwest = 100 * inv.logit(model2$coefficients[-c(5, 6)] %*% c(1, 0, 0, 0, 0, 0, 0) + c(model2$coefficients[5])*time_grid + c(model2$coefficients[6])*time_grid^2))
+
+ggplot(temp) + 
+  geom_line(aes(x = week, y = south)) +
+  geom_line(aes(x = week, y = midwest)) +
+  geom_line(aes(x = week, y = west)) +
+  geom_line(aes(x = week, y = northeast))
+
+mod <- lm(learning_modality ~ new_case, data = df)
+summary(mod)
