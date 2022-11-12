@@ -137,6 +137,15 @@ ggplot(regional) +
   theme_light()
 
 # Aggregating the epidemiologic data
+epi_national <- epi_df %>%
+  group_by(date) %>%
+  summarise(cases = sum(new_case),
+            deaths = sum(new_death),
+            avg_cases = mean(new_case),
+            avg_deaths = mean(new_death)) %>%
+  mutate(date = as.Date(date),
+         time = as.numeric(date - min(date)))
+
 epi_regional <- epi_df %>%
   mutate(region = as.factor(case_when(state %in% northeast ~ 'northeast',
                                       state %in% midwest ~ 'midwest',
@@ -151,19 +160,21 @@ epi_regional <- epi_df %>%
          time = as.numeric(date - min(date)))
 
 # Epi curves
-ggplot(epi_regional) + 
+ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
   geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                ymin = 0, ymax = Inf), fill = "grey", 
-            alpha = 0.2, col = "grey", inherit.aes = FALSE) +
-  geom_line(aes(x = date, y = cases, color = region), size = 1.3) +
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+  geom_line(aes( y = cases, color = region), size = 1) +
+  geom_point(aes(y = cases, color = region, shape = region), size = 1.7) +
   scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
   theme_light()
 
-ggplot(epi_regional) + 
+ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
   geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                ymin = 0, ymax = Inf), fill = "grey", 
-            alpha = 0.2, col = "grey", inherit.aes = FALSE) + 
-  geom_line(aes(x = date, y = deaths, color = region), size = 1.3) +
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) + 
+  geom_line(aes(y = deaths, color = region), size = 1) +
+  geom_point(aes(y = deaths, color = region, shape = region), size = 1.7) +
   scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
   theme_light()
 
@@ -171,7 +182,7 @@ ggplot(epi_regional) +
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
-model1 <- glm(learning_modality ~ region + region*new_case, data = df, family = 'binomial')
+model1 <- glm(learning_modality ~ region + new_case + region*new_case, data = df, family = 'binomial')
 summary(model1)
 betas <- model1$coefficients
 
@@ -181,7 +192,7 @@ summary(model2)
 gammas <- model2$coefficients
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 5) + region:ns(time, df = 5), 
+model3 <- glm(learning_modality ~ region + ns(time, df = 15) + region:ns(time, df = 15), 
               data = df, family = binomial())
 summary(model3)
 
