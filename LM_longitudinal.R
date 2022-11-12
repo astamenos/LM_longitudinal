@@ -1,6 +1,7 @@
 # Import libraries
 library(tidyverse)
 library(lubridate)
+library(splines)
 
 # Function to download data from HealthData.gov
 get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) {
@@ -18,6 +19,12 @@ get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) 
 inv.logit <- function(x) {
   return(exp(x)/(1 + exp(x)))
 }
+
+# Omicron visualization
+rect <- data.frame(xmin = as.Date('2021-12-01', ), 
+                   xmax = as.Date('2022-02-01'), 
+                   ymin = -Inf, 
+                   ymax = Inf)
 
 # Grab epidemiologic data
 epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
@@ -101,7 +108,8 @@ ggplot(missingness) +
                  alpha = 0.7,
                  bins = 10) +
   labs(x = '% of Data Missing', y = 'Number of Districts', 
-       title = 'Distribution of Data Missingness')
+       title = 'Distribution of Data Missingness') +
+  theme_light()
 
 # Aggregating by school data
 national <- df %>%
@@ -114,16 +122,25 @@ regional <- df %>%
 
 #
 ggplot(national) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
   geom_line(aes(x = week, y = pct_disrupted)) + 
   geom_point(aes(x = week, y = pct_disrupted)) +
   labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
-       title = '% of Districts in Hybrid or Remote over Time')
+       title = '% of Districts in Hybrid or Remote over Time') +
+  theme_light()
 
 ggplot(regional) + 
-  geom_line(aes(x = week, y = pct_disrupted, color = region)) + 
-  geom_point(aes(x = week, y = pct_disrupted, color = region, shape = region)) +
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+  geom_line(aes(x = week, y = pct_disrupted, color = region), size = 1) + 
+  geom_point(aes(x = week, y = pct_disrupted, color = region, shape = region), size = 1.5) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
   labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
-       title = '% of Districts in Hybrid or Remote over Time')
+       title = '% of Districts in Hybrid or Remote over Time') +
+  theme_light()
 
 # Aggregating the epidemiologic data
 epi_regional <- epi_df %>%
@@ -136,12 +153,24 @@ epi_regional <- epi_df %>%
             deaths = sum(new_death),
             avg_cases = mean(new_case),
             avg_deaths = mean(new_death)) %>%
-  mutate(date = as.Date(date),
-         time = as.numeric(date - min(date)))
+  mutate(time = as.numeric(date - min(date)))
 
 # Epi curves
-ggplot(epi_regional) + geom_line(aes(x = date, y = cases, color = region))
-ggplot(epi_regional) + geom_line(aes(x = date, y = deaths, color = region))
+ggplot(epi_regional) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey", 
+            alpha = 0.2, col = "grey", inherit.aes = FALSE) +
+  geom_line(aes(x = date, y = cases, color = region), size = 1.3) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  theme_light()
+
+ggplot(epi_regional) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey", 
+            alpha = 0.2, col = "grey", inherit.aes = FALSE) + 
+  geom_line(aes(x = date, y = deaths, color = region), size = 1.3) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  theme_light()
 
 # Districts with no missing data
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
@@ -157,7 +186,7 @@ summary(model2)
 gammas <- model2$coefficients
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 10) + region*ns(time, df = 10), 
+model3 <- glm(learning_modality ~ region + ns(time, df = 20), 
               data = df, family = binomial())
 summary(model3)
 
@@ -176,7 +205,8 @@ model2_probs <- model2_probs %>%
   
 
 model_comparisons <- epi_regional %>%
-  mutate(model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
+  mutate(date = as.Date(date),
+         model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
                                                                           as.numeric(betas[5])*avg_cases),
                                   region == 'northeast' ~ 100 * inv.logit(sum(betas[c(1, 2)]) + 
                                                                             sum(betas[c(5, 6)])*avg_cases),
@@ -194,12 +224,16 @@ model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c
 region_viz <- function(y, linesize = 1, pointsize = 2, 
                        colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {
   ggplot(model_comparisons) + 
+    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                  ymin = 0, ymax = Inf), fill = "grey90", 
+              alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
     geom_line(aes(x = date, y = !!ensym(y), color = region), size = linesize) +
     geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region), size = pointsize) +
     scale_color_manual(values = colors) +
     labs(x = 'Date', y = 'Probability of Disruption (%)', 
          title = sprintf('%s Estimated Probability of School Disruption by Region', 
-                         str_to_title(strsplit(y, '_')[[1]][1])))
+                         str_to_title(strsplit(y, '_')[[1]][1]))) +
+    theme_light()
   
 }
 
@@ -209,13 +243,18 @@ region_viz('model3_probs')
 
 model_viz <- function(region, size = 1.1) {
   ggplot(model_comparisons[model_comparisons$region == region,]) +
+    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                  ymin = 0, ymax = Inf), fill = "grey90", 
+              alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
     geom_line(aes(x = date, y = model1_probs, linetype = 'Model 1', color = 'Model 1'), size = size) +
     geom_line(aes(x = date, y = model2_probs, linetype = 'Model 2', color = 'Model 2'), size = size) +
     geom_line(aes(x = date, y = model3_probs, linetype = 'Model 3', color = 'Model 3'), size = size) +
     geom_point(aes(x = date, y = pct_disrupted)) +
     labs(x = 'Date', y = 'Probability of Disruption', 
          title = sprintf('%s: Observed and Estimated Probability of School Disruption', str_to_sentence(region)),
-         linetype = 'Legend', color = 'Legend')
+         linetype = 'Legend', color = 'Legend') +
+    scale_color_manual(values = c('#a6611a', '#dfc27d', '#018571')) +
+    theme_light()
 }
 
 model_viz('west')
