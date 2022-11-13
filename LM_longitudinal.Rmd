@@ -9,10 +9,271 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# 
+
+
+#
+
+
 
 Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be underreporting of "remote" and "hybrid" learning modalities.
 
 Unperceived characteristics in different Census regions (e.g., political ideology, attitude toward public health and COVID restrictions, differences in local education laws, etc).
+
+
+``` {r yada, warning = FALSE}
+# Import libraries
+library(tidyverse)
+library(lubridate)
+library(splines)
+library(gridExtra)
+
+# Function to download data from HealthData.gov
+get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) {
+  require(jsonlite)
+  
+  URL <- sprintf('https://%s/resource/%s.json', domain, identifier)
+  parameters <- sprintf("?$order=:id&$limit=%s&$offset=%s&$where=%s",
+                        limit, offset, date_query)
+  data <- read_json(paste(URL, parameters, sep = ''), simplifyVector = TRUE)
+  
+  return(data)
+}
+
+# Inverse logit function
+inv.logit <- function(x) {
+  return(exp(x)/(1 + exp(x)))
+}
+
+# Grab epidemiologic data
+epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
+
+# Transforming the epidemiologic data and aggregating by week
+epi_df <- epi_df %>%
+  filter(state != 'PR' & state != 'FSM' & state != 'GU' & state != 'MP' & state != 'AS'
+         & state != 'NYC' & state != 'PW' & state != 'RMI' & state != 'VI') %>%
+  select(submission_date, state, new_case, new_death) %>%
+  mutate(submission_date = as.Date(submission_date),
+         new_case = as.numeric(new_case),
+         new_death = as.numeric(new_death)) %>%
+  group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
+  summarise_if(is.numeric, sum) %>%
+  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7))
+
+# Grab the first 90000 rows and dataset schema for the learning modality data
+lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
+                  date_query = "week between '2021-08-01' and '2022-06-01'")
+
+# Load remaining data, 90000 rows at a time
+for(i in 1:6) {
+  batch <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 90000*i, 
+                    date_query = "week between '2021-08-01' and '2022-06-01'")
+  lm_df <- bind_rows(lm_df, batch)
+  rm(batch)
+  Sys.sleep(10)
+}
+
+# Crosswalk for US states and Census regions
+northeast <- c('CT', 'ME', 'MA', 'NH', 'RI', 'VT', 'NJ', 'NY', 'PA')
+midwest <- c('IN', 'IL', 'MI', 'OH', 'WI', 'IA', 'NE', 'KS', 'ND', 'MN', 'SD', 'MO')
+south <- c('DE', 'DC', 'FL', 'GA', 'MD', 'NC', 'SC', 'VA', 'WV', 'AL', 'KY', 'MS',
+           'TN', 'AR', 'LA', 'OK', 'TX')
+west <- c('AZ', 'CO', 'ID', 'NM', 'MT', 'UT', 'NV', 'WY', 'AK', 'CA', 'HI', 'OR', 'WA')
+
+# Transform the learning modality data
+df <- lm_df %>%
+  filter(state != 'BI' & state != 'PR') %>%
+  mutate(learning_modality = if_else(learning_modality == 'In Person', 0, 1),
+         week = as.Date(week),
+         time = as.numeric(week - min(week)),
+         operational_schools = as.integer(operational_schools),
+         student_count = as.integer(student_count),
+         region = as.factor(case_when(state %in% northeast ~ 'northeast',
+                            state %in% midwest ~ 'midwest',
+                            state %in% south ~ 'south',
+                            state %in% west ~ 'west'))) %>%
+  left_join(epi_df, by = c('state' = 'state', 'week' = 'date')) %>%
+  select(district_nces_id, district_name, week, learning_modality,
+         operational_schools, student_count, city, state, zip_code, time, 
+         region, new_case, new_death)
+
+# Missingness analysis
+pivot <- df %>%
+  select(district_nces_id, week, learning_modality) %>%
+  pivot_wider(id_cols = district_nces_id, 
+              names_from = week, values_from = learning_modality) %>%
+  pivot_longer(!district_nces_id, names_to = 'week', values_to = 'is_missing') %>%
+  mutate(is_missing = if_else(is.na(is_missing), 1, 0))
+
+ggplot(pivot) + 
+  geom_tile(aes(x = week, y = district_nces_id, fill = as.factor(is_missing))) +
+  scale_fill_manual(values = c('beige','darkred')) +
+  theme(
+    axis.text.x = element_blank(), # Remove x axis labels
+    axis.ticks.y = element_blank(), # Remove y axis ticks
+    axis.text.y = element_blank()  # Remove y axis labels
+  ) +
+  labs(x = 'Week', y = 'District', title = 'Visualization of Missingness by District and Week')
+
+missingness <- pivot %>%
+  group_by(district_nces_id) %>%
+  summarise(pct_missing = 100 *mean(is_missing))
+
+# Distribution of data missingness
+ggplot(missingness) +
+  geom_histogram(aes(x = pct_missing),
+                 color = 'black',
+                 fill = 'darkred',
+                 alpha = 0.7,
+                 bins = 10) +
+  labs(x = '% of Data Missing', y = 'Number of Districts', 
+       title = 'Distribution of Data Missingness') +
+  theme_light()
+
+# Aggregating by school data
+national <- df %>%
+  group_by(week) %>%
+  summarise(pct_disrupted = 100 * mean(learning_modality))
+
+regional <- df %>%
+  group_by(region, week) %>%
+  summarise(pct_disrupted = 100 * mean(learning_modality))
+
+#
+ggplot(national) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+  geom_line(aes(x = week, y = pct_disrupted)) + 
+  geom_point(aes(x = week, y = pct_disrupted)) +
+  labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
+       title = '% of Districts in Hybrid or Remote over Time') +
+  theme_light()
+
+ggplot(regional) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+  geom_line(aes(x = week, y = pct_disrupted, color = region), size = 1) + 
+  geom_point(aes(x = week, y = pct_disrupted, color = region, shape = region), size = 1.5) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
+       title = '% of Districts in Hybrid or Remote over Time') +
+  theme_light()
+
+# Aggregating the epidemiologic data
+epi_national <- epi_df %>%
+  group_by(date) %>%
+  summarise(cases = sum(new_case),
+            deaths = sum(new_death),
+            avg_cases = mean(new_case),
+            avg_deaths = mean(new_death)) %>%
+  mutate(date = as.Date(date),
+         time = as.numeric(date - min(date)))
+
+epi_regional <- epi_df %>%
+  mutate(region = as.factor(case_when(state %in% northeast ~ 'northeast',
+                                      state %in% midwest ~ 'midwest',
+                                      state %in% south ~ 'south',
+                                      state %in% west ~ 'west'))) %>%
+  group_by(region, date) %>%
+  summarise(cases = sum(new_case),
+            deaths = sum(new_death),
+            avg_cases = mean(new_case),
+            avg_deaths = mean(new_death)) %>%
+  mutate(date = as.Date(date),
+         time = as.numeric(date - min(date)))
+
+# Epi curves
+ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+  geom_line(aes( y = cases, color = region), size = 1) +
+  geom_point(aes(y = cases, color = region, shape = region), size = 1.7) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  theme_light()
+
+ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
+  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                ymin = 0, ymax = Inf), fill = "grey90", 
+            alpha = 0.2, col = "grey90", inherit.aes = FALSE) + 
+  geom_line(aes(y = deaths, color = region), size = 1) +
+  geom_point(aes(y = deaths, color = region, shape = region), size = 1.7) +
+  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  theme_light()
+
+# Districts with no missing data
+complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
+
+# Model 1
+model1 <- glm(learning_modality ~ region + time + I(time^2) + region:time, data = df, family = 'binomial')
+summary(model1)
+
+# Model 2
+model2 <- glm(learning_modality ~ region + new_case + new_death + region:new_case + region:new_death + time + I(time^2) + region:time, data = df, family = 'binomial')
+summary(model2)
+
+# Model 3
+model3 <- glm(learning_modality ~ region + ns(time, df = 12) + region:ns(time, df = 12), 
+              data = df, family = binomial())
+summary(model3)
+
+model_comparisons <- epi_regional %>%
+  rename('new_case' = 'avg_cases',
+         'new_death' = 'avg_deaths') %>%
+  left_join(regional, by = c('date' = 'week', 'region' = 'region'))
+
+model_comparisons$model1_probs <- 100 * predict.glm(model1, model_comparisons[,c('region', 'time')], type = 'response')
+model_comparisons$model2_probs <- 100 * predict.glm(model2, model_comparisons[,c('region', 'new_case', 'new_death', 'time')], type = 'response')
+model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
+
+region_viz <- function(y, linesize = 1, pointsize = 2, 
+                       colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {
+  ggplot(model_comparisons) + 
+    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                  ymin = 0, ymax = Inf), fill = "grey90", 
+              alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+    geom_line(aes(x = date, y = !!ensym(y), color = region), size = linesize) +
+    geom_point(aes(x = date, y = pct_disrupted, color = region, shape = region), size = pointsize) +
+    scale_color_manual(values = colors) +
+    labs(x = 'Date', y = 'Probability of Disruption (%)', 
+         title = sprintf('%s Estimated Probability of School Disruption by Region', 
+                         str_to_title(strsplit(y, '_')[[1]][1]))) +
+    theme_light()
+  
+}
+
+chart_mod1 <- region_viz('model1_probs')
+chart_mod2 <- region_viz('model2_probs')
+chart_mod3 <- region_viz('model3_probs')
+
+grid.arrange(chart_mod1, chart_mod2, chart_mod3, nrow = 3)
+
+model_viz <- function(region, size = 1.1) {
+  ggplot(model_comparisons[model_comparisons$region == region,]) +
+    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
+                  ymin = 0, ymax = Inf), fill = "grey90", 
+              alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
+    geom_line(aes(x = date, y = model1_probs, linetype = 'Model 1', color = 'Model 1'), size = size) +
+    geom_line(aes(x = date, y = model2_probs, linetype = 'Model 2', color = 'Model 2'), size = size) +
+    geom_line(aes(x = date, y = model3_probs, linetype = 'Model 3', color = 'Model 3'), size = size) +
+    geom_point(aes(x = date, y = pct_disrupted)) +
+    labs(x = 'Date', y = 'Probability of Disruption', 
+         title = sprintf('%s: Observed and Estimated Probability of School Disruption', str_to_sentence(region)),
+         linetype = 'Legend', color = 'Legend') +
+    scale_color_manual(values = c('#a6611a', '#7b3294', '#018571')) +
+    theme_light()
+}
+
+chart_west <- model_viz('west')
+chart_midwest <- model_viz('midwest')
+chart_northeast <- model_viz('northeast')
+chart_south <- model_viz('south')
+
+grid.arrange(chart_west, chart_midwest, chart_northeast, chart_south, nrow = 2)
+
+```
 
 # References
 

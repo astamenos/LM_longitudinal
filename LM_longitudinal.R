@@ -238,7 +238,7 @@ model_viz <- function(region, size = 1.1) {
     labs(x = 'Date', y = 'Probability of Disruption', 
          title = sprintf('%s: Observed and Estimated Probability of School Disruption', str_to_sentence(region)),
          linetype = 'Legend', color = 'Legend') +
-    scale_color_manual(values = c('#a6611a', '#dfc27d', '#018571')) +
+    scale_color_manual(values = c('#a6611a', '#7b3294', '#018571')) +
     theme_light()
 }
 
