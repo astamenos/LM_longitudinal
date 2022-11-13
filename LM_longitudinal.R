@@ -2,6 +2,7 @@
 library(tidyverse)
 library(lubridate)
 library(splines)
+library(gridExtra)
 
 # Function to download data from HealthData.gov
 get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) {
@@ -182,47 +183,25 @@ ggplot(epi_regional, aes(x = as.POSIXct(date))) +
 complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
-model1 <- glm(learning_modality ~ region + new_case + region*new_case, data = df, family = 'binomial')
+model1 <- glm(learning_modality ~ region + time + I(time^2) + region:time, data = df, family = 'binomial')
 summary(model1)
-betas <- model1$coefficients
 
 # Model 2
-model2 <- glm(learning_modality ~ region + time + I(time^2) + region * time, data = df, family = 'binomial')
+model2 <- glm(learning_modality ~ region + new_case + new_death + region:new_case + region:new_death + time + I(time^2) + region:time, data = df, family = 'binomial')
 summary(model2)
-gammas <- model2$coefficients
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 15) + region:ns(time, df = 15), 
+model3 <- glm(learning_modality ~ region + ns(time, df = 12) + region:ns(time, df = 12), 
               data = df, family = binomial())
 summary(model3)
 
-week_grid <- sort(unique(df$week))
-time_grid <- sort(unique(df$time))
-
-model2_probs <- data.frame(week_grid,
-                  midwest = 100 * inv.logit(gammas[1:4] %*% c(1, 0, 0, 0) + gammas[5]*time_grid + gammas[6]*time_grid^2),
-                  northeast = 100 * inv.logit(sum(gammas[c(1, 2)]) + sum(gammas[c(5, 7)])*time_grid + gammas[6]*time_grid^2),
-                  south = 100 * inv.logit(sum(gammas[c(1, 3)]) + sum(gammas[c(5, 8)])*time_grid + gammas[6]*time_grid^2),
-                  west = 100 * inv.logit(sum(gammas[c(1, 4)]) + sum(gammas[c(5, 9)])*time_grid + gammas[6]*time_grid^2))
-
-model2_probs <- model2_probs %>%
-  pivot_longer(!week_grid, names_to = 'region', values_to = 'model2_probs')
-  
-
 model_comparisons <- epi_regional %>%
-  mutate(model1_probs = case_when(region == 'midwest' ~ 100 * inv.logit(betas[1:4] %*% c(1, 0, 0, 0) +
-                                                                          as.numeric(betas[5])*avg_cases),
-                                  region == 'northeast' ~ 100 * inv.logit(sum(betas[c(1, 2)]) + 
-                                                                            sum(betas[c(5, 6)])*avg_cases),
-                                  region == 'south' ~ 100 * inv.logit(sum(betas[c(1, 3)]) + 
-                                                                        sum(betas[c(5, 7)])*avg_cases),
-                                  region == 'west' ~ 100 * inv.logit(sum(betas[c(1, 4)]) + 
-                                                                       sum(betas[c(5, 8)])*avg_cases)
-                                  
-  )) %>%
-  left_join(model2_probs, by = c('region' = 'region', 'date' = 'week_grid')) %>%
+  rename('new_case' = 'avg_cases',
+         'new_death' = 'avg_deaths') %>%
   left_join(regional, by = c('date' = 'week', 'region' = 'region'))
 
+model_comparisons$model1_probs <- 100 * predict.glm(model1, model_comparisons[,c('region', 'time')], type = 'response')
+model_comparisons$model2_probs <- 100 * predict.glm(model2, model_comparisons[,c('region', 'new_case', 'new_death', 'time')], type = 'response')
 model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
 
 region_viz <- function(y, linesize = 1, pointsize = 2, 
@@ -241,9 +220,11 @@ region_viz <- function(y, linesize = 1, pointsize = 2,
   
 }
 
-region_viz('model1_probs')
-region_viz('model2_probs')
-region_viz('model3_probs')
+chart_mod1 <- region_viz('model1_probs')
+chart_mod2 <- region_viz('model2_probs')
+chart_mod3 <- region_viz('model3_probs')
+
+grid.arrange(chart_mod1, chart_mod2, chart_mod3, nrow = 3)
 
 model_viz <- function(region, size = 1.1) {
   ggplot(model_comparisons[model_comparisons$region == region,]) +
@@ -261,7 +242,9 @@ model_viz <- function(region, size = 1.1) {
     theme_light()
 }
 
-model_viz('west')
-model_viz('midwest')
-model_viz('northeast')
-model_viz('south')
+chart_west <- model_viz('west')
+chart_midwest <- model_viz('midwest')
+chart_northeast <- model_viz('northeast')
+chart_south <- model_viz('south')
+
+grid.arrange(chart_west, chart_midwest, chart_northeast, chart_south, nrow = 2)
