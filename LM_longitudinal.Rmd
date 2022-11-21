@@ -1,18 +1,30 @@
 ---
-title: "ST505: Project"
+title: |
+  | \vspace{6cm} ST505: Project
 author: "Apostolos Stamenos"
-date: '2022-11-11'
+date: '2022-11-12'
+header-includes:
+  - \usepackage{float}
+  - \usepackage{indentfirst}
+  - \usepackage{caption}
+  - \floatplacement{figure}{H}
+geometry: "left=1.5cm,right=1.5cm,top=1.5cm,bottom=1.5cm"
+linestretch: 1.2
+indent: true
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
 ```
 
-# 
+\newpage
 
+# Data Collection Protocol
+The main dataset of interest contains information about approximately $14,500$ school districts in the U.S. There are more than $17,000$ school districts in the country.
 
-#
+# The Statistical Analysis
 
 
 
@@ -20,7 +32,8 @@ Missingness may be happening at random, or there might be a systematic reason fo
 
 Unperceived characteristics in different Census regions (e.g., political ideology, attitude toward public health and COVID restrictions, differences in local education laws, etc).
 
-
+# Appendix
+## R Code
 ``` {r yada, warning = FALSE}
 # Import libraries
 library(tidyverse)
@@ -275,9 +288,22 @@ grid.arrange(chart_west, chart_midwest, chart_northeast, chart_south, nrow = 2)
 
 ```
 
-# References
+\begin{table}[H]\begin{center}
+\caption{{\bf Yada yada}}\label{t:model1}
+\begin{tabular}{l|c}
+\\
+ \hline
+Comparison & Tukey p-value  \\ \hline
+ \hline
+\end{tabular} 
+\end{center}
+\end{table}
+
+## References
 
 * https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36
 * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4241048/
 * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3016756/
+* https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html#par_textimage
 
+## Data
