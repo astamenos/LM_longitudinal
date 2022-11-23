@@ -28,6 +28,8 @@ The data was collected to help the Centers for Disease Control and Prevention as
 
 The data is an observational study, since there are no random treatment assignments.
 
+Potential confounders: ventilation and air flow, physical size of school building (i.e., are students able to sit far enough apart), 
+
 # The Statistical Analysis
 
 

@@ -31,9 +31,29 @@ pop_est <- read.csv('https://www2.census.gov/programs-surveys/popest/datasets/20
 pop_est <- pop_est %>%
   left_join(crosswalk, by = c('NAME' = 'state_full')) %>%
   select(state, region, POPESTIMATE2021)
+pop_estimate_regional <- pop_est %>%
+  group_by(region) %>%
+  summarise_if(is.numeric, sum)
+
+# Grab vaccination data
+vaccines_df <- get_data('data.cdc.gov', identifier = 'unsk-b7fc', 
+                     date_query = "date between '2021-07-26' and '2022-05-29'")
 
 # Grab epidemiologic data
-epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', date_query = "submission_date between '2021-07-26' and '2022-05-29'")
+epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', 
+                   date_query = "submission_date between '2021-07-26' and '2022-05-29'")
+
+# Transforming the vaccine data
+vaccines_df <- vaccines %>% 
+  select(date, location, administered, administered_18plus) 
+
+  mutate(date = as.Date(date),
+         new_case = as.numeric(new_case),
+         new_death = as.numeric(new_death)) %>%
+  group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
+  summarise_if(is.numeric, sum) %>%
+  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7)) %>%
+  left_join(crosswalk, by = c('state' = 'state'))
 
 # Transforming the epidemiologic data and aggregating by week
 epi_df <- epi_df %>%
@@ -46,9 +66,7 @@ epi_df <- epi_df %>%
   group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
   summarise_if(is.numeric, sum) %>%
   mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7)) %>%
-  left_join(pop_est) %>%
-  mutate(cases_per_100k = 100000 * new_case / POPESTIMATE2021,
-         deaths_per_100k = 100000 * new_death / POPESTIMATE2021)
+  left_join(crosswalk, by = c('state' = 'state'))
 
 # Grab the first 90000 rows and dataset schema for the learning modality data
 lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
@@ -72,10 +90,16 @@ df <- lm_df %>%
          operational_schools = as.integer(operational_schools),
          student_count = as.integer(student_count)) %>%
   left_join(epi_df, by = c('state' = 'state', 'week' = 'date')) %>%
+  left_join(crosswalk, by = c('state' = 'state')) %>%
+  left_join(pop_est, by = c('state' = 'state')) %>%
+  mutate(region = as.factor(region),
+         cases_per_100k = 100000 * new_case / POPESTIMATE2021,
+         deaths_per_100k = 100000 * new_death / POPESTIMATE2021,
+         students_per_school = student_count / operational_schools) %>%
   select(district_nces_id, district_name, week, learning_modality,
          operational_schools, student_count, city, state, zip_code, 
-         region, time, cases_per_100k, deaths_per_100k) %>%
-  mutate(region = as.factor(region))
+         time, cases_per_100k, deaths_per_100k, students_per_school, region) %>%
+  drop_na(operational_schools, student_count)
 
 # Missingness analysis
 pivot <- df %>%
@@ -110,26 +134,24 @@ ggplot(missingness) +
        title = 'Distribution of Data Missingness') +
   theme_light()
 
-# Aggregating by school data
-national <- df %>%
-  group_by(week) %>%
-  summarise(pct_disrupted = 100 * mean(learning_modality))
+# Districts with no missing data
+complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
+# Only keep districts with no missing data
+df_original <- df
+df <- df_original %>%
+  filter(district_nces_id %in% complete_districts)
+
+# Aggregating/averaging the data by region
 regional <- df %>%
   group_by(region, week) %>%
-  summarise(pct_disrupted = 100 * mean(learning_modality))
+  summarise(pct_disrupted = 100 * mean(learning_modality),
+            students_per_school = mean(students_per_school),
+            cases_per_100k = mean(cases_per_100k),
+            deaths_per_100k = mean(deaths_per_100k)) %>% 
+  mutate(time = as.numeric(as.Date(week) - min(as.Date(week))))
 
-#
-ggplot(national) + 
-  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                ymin = 0, ymax = Inf), fill = "grey90", 
-            alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
-  geom_line(aes(x = week, y = pct_disrupted)) + 
-  geom_point(aes(x = week, y = pct_disrupted)) +
-  labs(x = 'Date', y = '% of Districts in Hybrid or Remote', 
-       title = '% of Districts in Hybrid or Remote over Time') +
-  theme_light()
-
+# Graphing the regional learning modality data
 ggplot(regional) + 
   geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
                 ymin = 0, ymax = Inf), fill = "grey90", 
@@ -141,54 +163,27 @@ ggplot(regional) +
        title = '% of Districts in Hybrid or Remote over Time') +
   theme_light()
 
-# Aggregating the epidemiologic data
-epi_national <- epi_df %>%
-  group_by(date) %>%
-  summarise(cases = sum(new_case),
-            deaths = sum(new_death),
-            avg_cases_per_100k = mean(cases)/mean(POPESTIMATE2021),
-            avg_deaths_per_100k = mean(deaths)/mean(POPESTIMATE2021)) %>%
-  mutate(date = as.Date(date),
-         time = as.numeric(date - min(date)))
-
-epi_regional <- epi_df %>%
-  mutate(region = as.factor(region)) %>%
-  group_by(region, date) %>%
-  summarise(cases = sum(new_case),
-            deaths = sum(new_death),
-            avg_cases_per_100k = 100000 * sum(cases)/mean(POPESTIMATE2021),
-            avg_deaths_per_100k = 100000 * sum(deaths)/mean(POPESTIMATE2021)) %>%
-  mutate(date = as.Date(date),
-         time = as.numeric(date - min(date)))
-
 # Epi curves
-ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
+ggplot(regional) + 
   geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
                 ymin = 0, ymax = Inf), fill = "grey90", 
             alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
-  geom_line(aes( y = avg_cases_per_100k, color = region), size = 1) +
-  geom_point(aes(y = avg_cases_per_100k, color = region, shape = region), size = 1.7) +
+  geom_line(aes(x = week, y = cases_per_100k, color = region), size = 1) + 
+  geom_point(aes(x = week, y = cases_per_100k, color = region, shape = region), size = 1.5) +
   scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
+  labs(x = 'Date', y = 'Cases per 100K', 
+       title = 'Average Cases per 100K by Region') +
   theme_light()
-
-ggplot(epi_regional, aes(x = as.POSIXct(date))) + 
-  geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                ymin = 0, ymax = Inf), fill = "grey90", 
-            alpha = 0.2, col = "grey90", inherit.aes = FALSE) + 
-  geom_line(aes(y = avg_deaths_per_100k, color = region), size = 1) +
-  geom_point(aes(y = avg_deaths_per_100k, color = region, shape = region), size = 1.7) +
-  scale_color_manual(values = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) +
-  theme_light()
-
-# Districts with no missing data
-complete_districts <- missingness[missingness$pct_missing == 0,]$district_nces_id
 
 # Model 1
 model1 <- glm(learning_modality ~ region + time + I(time^2) + region:time, data = df, family = 'binomial')
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ region + cases_per_100k + region:cases_per_100k + time + I(time^2) + region:time, data = df, family = 'binomial')
+model2 <- glm(learning_modality ~ region + cases_per_100k + region:cases_per_100k + 
+                deaths_per_100k + region:deaths_per_100k  + students_per_school + 
+                region:students_per_school + time + I(time^2), 
+              data = df, family = 'binomial')
 summary(model2)
 
 # Model 3
@@ -196,14 +191,9 @@ model3 <- glm(learning_modality ~ region + ns(time, df = 12) + region:ns(time, d
               data = df, family = binomial())
 summary(model3)
 
-model_comparisons <- epi_regional %>%
-  rename('cases_per_100k' = 'avg_cases_per_100k',
-         'deaths_per_100k' = 'avg_deaths_per_100k') %>%
-  left_join(regional, by = c('date' = 'week', 'region' = 'region'))
-
-model_comparisons$model1_probs <- 100 * predict.glm(model1, model_comparisons[,c('region', 'time')], type = 'response')
-model_comparisons$model2_probs <- 100 * predict.glm(model2, model_comparisons[,c('region', 'cases_per_100k', 'time')], type = 'response')
-model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
+regional$model1_probs <- 100 * predict.glm(model1, regional[,c('region', 'time')], type = 'response')
+regional$model2_probs <- 100 * predict.glm(model2, regional[,c('region', 'students_per_school', 'cases_per_100k', 'deaths_per_100k', 'time')], type = 'response')
+regional$model3_probs <- 100 * predict.glm(model3, regional[,c('region', 'time')], type = 'response')
 
 region_viz <- function(y, linesize = 1, pointsize = 2, 
                        colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {
@@ -229,15 +219,24 @@ grid.arrange(chart_mod1, chart_mod2, chart_mod3, nrow = 3)
 
 model_viz <- function(region, size = 1.1) {
   ggplot(model_comparisons[model_comparisons$region == region,]) +
-    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                  ymin = 0, ymax = Inf), fill = "grey90", 
+    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), 
+                  xmax = as.POSIXct("2022-02-01"), 
+                  ymin = 0, ymax = Inf), 
+              fill = "grey90", 
               alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
-    geom_line(aes(x = date, y = model1_probs, linetype = 'Model 1', color = 'Model 1'), size = size) +
-    geom_line(aes(x = date, y = model2_probs, linetype = 'Model 2', color = 'Model 2'), size = size) +
-    geom_line(aes(x = date, y = model3_probs, linetype = 'Model 3', color = 'Model 3'), size = size) +
+    geom_line(aes(x = date, y = model1_probs, 
+                  linetype = 'Model 1', color = 'Model 1'), 
+              size = size) +
+    geom_line(aes(x = date, y = model2_probs, 
+                  linetype = 'Model 2', color = 'Model 2'), 
+              size = size) +
+    geom_line(aes(x = date, y = model3_probs, 
+                  linetype = 'Model 3', color = 'Model 3'), 
+              size = size) +
     geom_point(aes(x = date, y = pct_disrupted)) +
     labs(x = 'Date', y = 'Probability of Disruption', 
-         title = sprintf('%s: Observed and Estimated Probability of School Disruption', str_to_sentence(region)),
+         title = sprintf('%s: Observed and Estimated Probability of School Disruption', 
+                         str_to_sentence(region)),
          linetype = 'Legend', color = 'Legend') +
     scale_color_manual(values = c('#a6611a', '#7b3294', '#018571')) +
     theme_light()
