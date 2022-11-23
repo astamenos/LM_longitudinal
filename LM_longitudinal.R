@@ -156,8 +156,8 @@ epi_regional <- epi_df %>%
   group_by(region, date) %>%
   summarise(cases = sum(new_case),
             deaths = sum(new_death),
-            avg_cases_per_100k = 100000 * mean(cases)/mean(POPESTIMATE2021),
-            avg_deaths_per_100k = 100000 * mean(deaths)/mean(POPESTIMATE2021)) %>%
+            avg_cases_per_100k = 100000 * sum(cases)/mean(POPESTIMATE2021),
+            avg_deaths_per_100k = 100000 * sum(deaths)/mean(POPESTIMATE2021)) %>%
   mutate(date = as.Date(date),
          time = as.numeric(date - min(date)))
 
@@ -188,7 +188,7 @@ model1 <- glm(learning_modality ~ region + time + I(time^2) + region:time, data 
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ region + cases_per_100k + deaths_per_100k + region:cases_per_100k + region:deaths_per_100k + time + I(time^2) + region:time, data = df, family = 'binomial')
+model2 <- glm(learning_modality ~ region + cases_per_100k + region:cases_per_100k + time + I(time^2) + region:time, data = df, family = 'binomial')
 summary(model2)
 
 # Model 3
@@ -202,7 +202,7 @@ model_comparisons <- epi_regional %>%
   left_join(regional, by = c('date' = 'week', 'region' = 'region'))
 
 model_comparisons$model1_probs <- 100 * predict.glm(model1, model_comparisons[,c('region', 'time')], type = 'response')
-model_comparisons$model2_probs <- 100 * predict.glm(model2, model_comparisons[,c('region', 'cases_per_100k', 'deaths_per_100k', 'time')], type = 'response')
+model_comparisons$model2_probs <- 100 * predict.glm(model2, model_comparisons[,c('region', 'cases_per_100k', 'time')], type = 'response')
 model_comparisons$model3_probs <- 100 * predict.glm(model3, model_comparisons[,c('region', 'time')], type = 'response')
 
 region_viz <- function(y, linesize = 1, pointsize = 2, 
