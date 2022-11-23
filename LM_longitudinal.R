@@ -43,17 +43,27 @@ vaccines_df <- get_data('data.cdc.gov', identifier = 'unsk-b7fc',
 epi_df <- get_data('data.cdc.gov', identifier = '9mfq-cb36', 
                    date_query = "submission_date between '2021-07-26' and '2022-05-29'")
 
-# Transforming the vaccine data
-vaccines_df <- vaccines %>% 
-  select(date, location, administered, administered_18plus) 
+# Grab the first 90000 rows and dataset schema for the learning modality data
+lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
+                  date_query = "week between '2021-08-01' and '2022-06-01'")
 
+# Load remaining data, 90000 rows at a time
+for(i in 1:6) {
+  batch <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 90000*i, 
+                    date_query = "week between '2021-08-01' and '2022-06-01'")
+  lm_df <- bind_rows(lm_df, batch)
+  rm(batch)
+  Sys.sleep(10)
+}
+
+# Transforming the vaccine data
+vaccines_df <- vaccines %>%
   mutate(date = as.Date(date),
-         new_case = as.numeric(new_case),
-         new_death = as.numeric(new_death)) %>%
-  group_by(state, year = isoyear(submission_date), week = isoweek(submission_date)) %>% 
-  summarise_if(is.numeric, sum) %>%
-  mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7)) %>%
-  left_join(crosswalk, by = c('state' = 'state'))
+         administered = as.numeric(administered),
+         administered_18plus = as.numeric(administered_18plus),
+         ped_vaccinations = administered - administered_18plus) %>%
+  filter(date %in% unique(as.Date(lm_df$week))) %>%
+  select(date, location, ped_vaccinations) 
 
 # Transforming the epidemiologic data and aggregating by week
 epi_df <- epi_df %>%
@@ -68,20 +78,7 @@ epi_df <- epi_df %>%
   mutate(date = parse_date_time(sprintf('%s-%s-0', year, week), '%Y-%U-%w') + days(7)) %>%
   left_join(crosswalk, by = c('state' = 'state'))
 
-# Grab the first 90000 rows and dataset schema for the learning modality data
-lm_df <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 0, 
-                  date_query = "week between '2021-08-01' and '2022-06-01'")
-
-# Load remaining data, 90000 rows at a time
-for(i in 1:6) {
-  batch <- get_data('HealthData.gov', 'aitj-yx37', limit = 90000, offset = 90000*i, 
-                    date_query = "week between '2021-08-01' and '2022-06-01'")
-  lm_df <- bind_rows(lm_df, batch)
-  rm(batch)
-  Sys.sleep(10)
-}
-
-# Transform the learning modality data
+# Transform the learning modality data and merging all the datasets
 df <- lm_df %>%
   filter(state != 'BI' & state != 'PR') %>%
   mutate(learning_modality = if_else(learning_modality == 'In Person', 0, 1),
@@ -90,14 +87,16 @@ df <- lm_df %>%
          operational_schools = as.integer(operational_schools),
          student_count = as.integer(student_count)) %>%
   left_join(epi_df, by = c('state' = 'state', 'week' = 'date')) %>%
+  left_join(vaccines_df, by = c('state' = 'location', 'week' = 'date')) %>%
   left_join(crosswalk, by = c('state' = 'state')) %>%
   left_join(pop_est, by = c('state' = 'state')) %>%
   mutate(region = as.factor(region),
+         total_vaccines_per_100k = 100000 * ped_vaccinations / POPESTIMATE2021,
          cases_per_100k = 100000 * new_case / POPESTIMATE2021,
          deaths_per_100k = 100000 * new_death / POPESTIMATE2021,
          students_per_school = student_count / operational_schools) %>%
   select(district_nces_id, district_name, week, learning_modality,
-         operational_schools, student_count, city, state, zip_code, 
+         operational_schools, student_count, city, state, zip_code, total_vaccines_per_100k,
          time, cases_per_100k, deaths_per_100k, students_per_school, region) %>%
   drop_na(operational_schools, student_count)
 
@@ -146,6 +145,7 @@ df <- df_original %>%
 regional <- df %>%
   group_by(region, week) %>%
   summarise(pct_disrupted = 100 * mean(learning_modality),
+            total_vaccines_per_100k = mean(total_vaccines_per_100k),
             students_per_school = mean(students_per_school),
             cases_per_100k = mean(cases_per_100k),
             deaths_per_100k = mean(deaths_per_100k)) %>% 
@@ -180,20 +180,28 @@ model1 <- glm(learning_modality ~ region + time + I(time^2) + region:time, data 
 summary(model1)
 
 # Model 2
-model2 <- glm(learning_modality ~ region + cases_per_100k + region:cases_per_100k + 
-                deaths_per_100k + region:deaths_per_100k  + students_per_school + 
-                region:students_per_school + time + I(time^2), 
+model2 <- glm(learning_modality ~ region + cases_per_100k + deaths_per_100k + 
+                students_per_school + total_vaccines_per_100k + 
+                region:cases_per_100k + region:deaths_per_100k  + 
+                region:students_per_school + region:total_vaccines_per_100k + 
+                time + I(time^2), 
               data = df, family = 'binomial')
 summary(model2)
 
 # Model 3
-model3 <- glm(learning_modality ~ region + ns(time, df = 12) + region:ns(time, df = 12), 
+model3 <- glm(learning_modality ~ region + bs(time, df = 8) + region:bs(time, df = 8), 
               data = df, family = binomial())
 summary(model3)
 
-regional$model1_probs <- 100 * predict.glm(model1, regional[,c('region', 'time')], type = 'response')
-regional$model2_probs <- 100 * predict.glm(model2, regional[,c('region', 'students_per_school', 'cases_per_100k', 'deaths_per_100k', 'time')], type = 'response')
-regional$model3_probs <- 100 * predict.glm(model3, regional[,c('region', 'time')], type = 'response')
+regional$model1_probs <- 100*predict.glm(model1, 
+                                         regional[,c('region', 'time')], 
+                                         type = 'response')
+regional$model2_probs <- 100*predict.glm(model2, 
+                                         regional[,c('region','students_per_school', 'total_vaccines_per_100k', 'cases_per_100k', 'deaths_per_100k', 'time')], 
+                                         type = 'response')
+regional$model3_probs <- 100*predict.glm(model3, 
+                                         regional[,c('region', 'time')], 
+                                         type = 'response')
 
 region_viz <- function(y, linesize = 1, pointsize = 2, 
                        colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {

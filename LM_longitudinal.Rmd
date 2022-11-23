@@ -311,5 +311,6 @@ Comparison & Tukey p-value  \\ \hline
 * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4241048/
 * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3016756/
 * https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html#par_textimage
+* https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-Jurisdi/unsk-b7fc
 
 ## Data
