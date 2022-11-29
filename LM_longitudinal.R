@@ -16,11 +16,6 @@ get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) 
   return(data)
 }
 
-# Inverse logit function
-inv.logit <- function(x) {
-  return(exp(x)/(1 + exp(x)))
-}
-
 # State crosswalk
 crosswalk <- data.frame(state_full = state.name, state = state.abb, 
                         region = str_replace(state.region, 'North Central', 'Midwest'))
