@@ -53,7 +53,22 @@ Unperceived characteristics in different Census regions (e.g., political ideolog
 \caption{{\bf Results of Model 1}}\label{t:model1}
 \begin{tabular}{l|c}
 \hline
-ID & Estimate \\ \hline
+Parameter & Estimate & Std. Error & z value & Pr(>|z|) \\ \hline
+
+\hline
+\end{tabular} 
+\end{center}
+\end{table}
+
+\begin{table}[H]\begin{center}
+\caption{{\bf Results of Model 2}}\label{t:model2}
+\begin{tabular}{l|cccc}
+\hline
+Parameter & Estimate & Std. Error & z value & Pr(>|z|) \\ \hline
+(Intercept) & -5.68707  &  0.22611 & -25.152 & < 2e-16 \\
+regionNortheast & -2.84973  &  0.99794 & -2.856 & 0.004296 \\
+regionSouth & -1.10769  &  0.37525 & -2.952 & 0.003158 \\
+regionWest & 0.19967  &  0.34891 &  0.572 & 0.567142 \\
 \hline
 \end{tabular} 
 \end{center}

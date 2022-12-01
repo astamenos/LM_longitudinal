@@ -31,24 +31,24 @@ region_viz <- function(y, linesize = 1, pointsize = 2,
 }
 
 model_viz <- function(region, size = 1.1) {
-  ggplot(model_comparisons[regional$region == region,]) +
+  ggplot(regional[regional$region == region,]) +
     geom_rect(aes(xmin = as.POSIXct("2021-12-01"), 
                   xmax = as.POSIXct("2022-02-01"), 
                   ymin = 0, ymax = Inf), 
               fill = "grey90", 
               alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
-    geom_line(aes(x = date, y = model1_probs, 
+    geom_line(aes(x = week, y = model1_probs, 
                   linetype = 'Model 1', color = 'Model 1'), 
               size = size) +
-    geom_line(aes(x = date, y = model2_probs, 
+    geom_line(aes(x = week, y = model2_probs, 
                   linetype = 'Model 2', color = 'Model 2'), 
               size = size) +
-    geom_point(aes(x = date, y = pct_disrupted)) +
+    geom_point(aes(x = week, y = pct_disrupted)) +
     labs(x = 'Date', y = 'Probability of Disruption', 
          title = sprintf('%s: Observed and Estimated Probability of School Disruption', 
                          str_to_sentence(region)),
          linetype = 'Legend', color = 'Legend') +
-    scale_color_manual(values = c('#a6611a', '#7b3294')) +
+    scale_color_manual(values = c('#a6611a', '#018571')) +
     theme_light()
 }
 

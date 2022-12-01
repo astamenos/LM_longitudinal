@@ -83,21 +83,19 @@ ggplot(regional) +
 model1_full <- glm(learning_modality ~ region + cases_per_100k + deaths_per_100k + 
                      students_per_school + total_vaccines_per_100k + 
                      region:cases_per_100k + region:deaths_per_100k  + 
-                     region:students_per_school + region:total_vaccines_per_100k + 
-                     time + I(time^2), 
+                     region:students_per_school + region:total_vaccines_per_100k, 
                    data = df, family = binomial())
 model1_reduced <- glm(learning_modality ~ cases_per_100k + deaths_per_100k + 
-                        students_per_school + total_vaccines_per_100k + 
-                        time + I(time^2), 
+                        students_per_school + total_vaccines_per_100k, 
                       data = df, family = binomial())
 anova(model1_reduced, model1_full, test = 'LRT')
 model1 <- model1_full
 summary(model1)
 
 # Model 2
-model2_full <- glm(learning_modality ~ region + bs(time, df = 8) + region:bs(time, df = 8), 
+model2_full <- glm(learning_modality ~ region + bs(time, df = 6) + region:bs(time, df = 6), 
               data = df, family = binomial())
-model2_reduced <- glm(learning_modality ~ bs(time, df = 8), 
+model2_reduced <- glm(learning_modality ~ bs(time, df = 6), 
                    data = df, family = binomial())
 anova(model2_reduced, model2_full, test = 'LRT')
 model2 <- model2_full
@@ -105,7 +103,7 @@ summary(model2)
 
 # Model predictions
 regional$model1_probs <- 100*predict.glm(model1, 
-                                         regional[,c('region','students_per_school', 'total_vaccines_per_100k', 'cases_per_100k', 'deaths_per_100k', 'time')], 
+                                         regional[,c('region','students_per_school', 'total_vaccines_per_100k', 'cases_per_100k', 'deaths_per_100k')], 
                                          type = 'response')
 regional$model2_probs <- 100*predict.glm(model2, 
                                          regional[,c('region', 'time')], 
@@ -116,9 +114,13 @@ chart_mod2 <- region_viz('model2_probs')
 
 grid.arrange(chart_mod1, chart_mod2, nrow = 2)
 
-chart_west <- model_viz('west')
-chart_midwest <- model_viz('midwest')
-chart_northeast <- model_viz('northeast')
-chart_south <- model_viz('south')
+chart_west <- model_viz('West')
+chart_midwest <- model_viz('Midwest')
+chart_northeast <- model_viz('Northeast')
+chart_south <- model_viz('South')
 
 grid.arrange(chart_west, chart_midwest, chart_northeast, chart_south, nrow = 2)
+
+temp <- df %>%
+  group_by(district_nces_id) %>%
+  mutate(lag_total_vaccines_per_100k = lag(total_vaccines_per_100k, order_by = week))
