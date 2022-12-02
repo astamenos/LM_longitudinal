@@ -8,7 +8,7 @@ header-includes:
   - \usepackage{indentfirst}
   - \usepackage{caption}
   - \floatplacement{figure}{H}
-geometry: "left=2.54cm,right=2.54cm,top=2.54cm,bottom=2.54cm"
+geometry: "left=2cm,right=2cm,top=2cm,bottom=2cm"
 linestretch: 1.2
 indent: true
 output: pdf_document
@@ -23,11 +23,11 @@ knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
 
 # Data Collection Protocol
 
-For my analysis, I fit different specifications of a logistic regression model to understand the effect of public health trends and time on the estimated probability of disruptions to in-person learning during the 2021-2022 school year. The data was collected to help the Department of Health and Human Services, the Department of Education, and the White House assess how schools were operating during the COVID-19 pandemic (___, ). For the purpose of this assessment, we used the following definitions for school learning modalities:
+For my analysis, I fit different specifications of a logistic regression model to understand the effect of public health trends and time on the estimated probability of disruptions to in-person learning during the 2021-2022 school year. The data was collected to help the Department of Health and Human Services, the Department of Education, and the White House assess how schools were operating during the COVID-19 pandemic (___, ). For the purpose of this assessment, HHS used the following definitions for school learning modalities:
 
-* In-Person:
-* Remote:
-* Hybrid:
+* *In-Person*: All schools within the district offer face-to-face instruction 5 days per week to all students at all available grade levels
+* *Remote*: Schools within the district do not offer face-to-face instruction; all learning is conducted online/remotely to all students at all available grade levels
+* *Hybrid*: Schools within the district offer a combination of in-person and remote learning; face-to-face instruction is offered less than 5 days per week, or only to a subset of students
 
 For my analysis, I combined "remote" and "hybrid" into a single category, where $1$ denotes "not operating fully in person" and $0$ denotes "operating fully in person". The dataset contains information about approximately $14,500$ K-12 public and independent charter school districts in the U.S. This is a longitudinal dataset covering the school years between August 2021 and December 2022. It contains weekly estimates of how each school district was operating (e.g., fully in person, fully remotely, or in a hybrid setting). In addition to learning modality estimates, the dataset contains information about the number of schools within each school district and the total number of students throughout the district. Some school districts contain a single school, whereas other districts contain multiple schools.
 
@@ -35,48 +35,48 @@ Based on the National Center for Educational Statistics (NCES, 20xx), throughout
 
 There are some districts that only one third-party contractor covers, but there are also some districts that both contractors cover. A Hidden Markov Model (HMM) was used to integrate the different sources of information and estimate the most likely learning modality whenever there is conflicting information in the data sources (, 202x). In other words, the learning modality estimates in this dataset are the output of a probabilistic model, so they may not be $100\%$ accurate, but they do an adequate job of describing school district operations during the pandemic. For the purposes of this paper, the output of the HMM is the input to my analysis.
 
-In addition to the learning modality dataset, I also imported state-level vaccination data from (), case and death data from (), and population estimate data from ___. I used Application Programming Interfaces to efficiently retrieve the data needed for this analysis. I did some preprocessing to m
+In addition to the learning modality dataset, I also imported state-level vaccination data from (), case and death data from (), and population estimate data from ___. I did some preprocessing to make sure that the different input datasets are comparable (e.g., time series have weekly frequency, rates are per capita, ).
 The school learning modality data comes from an observational study, since there is no random assignment of treatments.
 
 Potential confounders: ventilation and air flow, physical size of school building (i.e., are students able to sit far enough apart), 
 
 # The Statistical Analysis
 
+![Analysis of Missingness](missingness.png){width=500px}
 
-![Analysis of Missingness](missingness.png)
-
-Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be underreporting of "remote" and "hybrid" learning modalities.
+Most districts (approximately $81\%$) reported data for $100\%$ of the weeks in the 2021-2022 school year, but some districts had data missing for up to $97.73\%$ of the school year. Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be under-reporting of "remote" and "hybrid" learning modalities. For this analysis, I only considered the $12,015$ districts that had no missing data, but further research should address how to deal with the missingness.
 
 Unperceived characteristics in different Census regions (e.g., political ideology, attitude toward public health and COVID restrictions, differences in local education laws, etc).
 
+$\mathcal{M}_1: \text{logit} (\mathbf p_{t}) = \beta_0 + \beta_1 \mathbf X_{1} + \beta_2 \mathbf X_{2} + \beta_3 \mathbf X_{3} + \beta_4 \mathbf X_{4} + \beta_5 \mathbf X_{t - 1, 5} + \beta_6 \mathbf X_{t - 1, 6} + \sum_{j = 7}^{15} \beta_j \mathbf Z_j + \boldsymbol \varepsilon_t$
+
+where $\mathbf X_{1}, \mathbf X_{2}, \mathbf X_{3}$ are indicators for three of the census regions, $\mathbf X_{4}$ is the ratio of students to schools, $\mathbf X_{t - 1, 5}, \mathbf X_{t - 1, 6}$ are the values of some public health metrics during the previous week. The $\mathbf Z_j$ are the $9 (= 3 \cdot 3)$ interaction terms between the three Census indicators and the three continuous variables.
+
+Using a Likelihood Ratio Test, I compared the full version of the model to a reduced version of the model without indicators for the different Census regions. This tests the null hypothesis of having the same intercept and slopes regardless of region. With a p-value of $p < 0.0001$, there is strong enough evidence to reject the null hypothesis. At least one of the Census regions has an intercept and/or predictor effect that is significantly different from that of the other Census regions. This full model has an AIC of $75,003.71$. All of the parameters except for $\beta_1$ (the difference in coefficients for the Midwest and the Northeast) and $\beta_11$ (the difference in the effect of *lag_cases_per_100k* in the Midwest and the South) have p-values much smaller than $0.05$. Here are the estimated parameters for the four Census regions. Although there are noticeable regional differences in the magnitude of the estimated parameters, the signs remain the same from region to region.
+
 \begin{table}[H]\begin{center}
 \caption{{\bf Results of Model 1}}\label{t:model1}
-\begin{tabular}{l|c}
-\hline
-Parameter & Estimate & Std. Error & z value & Pr(>|z|) \\ \hline
-
-\hline
-\end{tabular} 
-\end{center}
-\end{table}
-
-\begin{table}[H]\begin{center}
-\caption{{\bf Results of Model 2}}\label{t:model2}
 \begin{tabular}{l|cccc}
 \hline
-Parameter & Estimate & Std. Error & z value & Pr(>|z|) \\ \hline
-(Intercept) & -5.68707  &  0.22611 & -25.152 & < 2e-16 \\
-regionNortheast & -2.84973  &  0.99794 & -2.856 & 0.004296 \\
-regionSouth & -1.10769  &  0.37525 & -2.952 & 0.003158 \\
-regionWest & 0.19967  &  0.34891 &  0.572 & 0.567142 \\
+Region & Intercept & Students per School & 1-Lag Cases per 100k & 1-Lag Pediatric Vaccinations per 100k  \\ \hline
+Midwest & -4.206805 & 0.000428 & 0.000998 & -0.000084 \\
+Northeast & -4.262379 & 0.000683 & 0.001395 & -0.000136 \\
+South & -3.553687 & 0.000679 & 0.000927 & -0.000142 \\
+West & -3.819821 & 0.000047 & 0.000539 & -0.000052 \\
 \hline
 \end{tabular} 
 \end{center}
 \end{table}
 
-![Regional Predictions by Model](regional_viz.png)
+$$\mathcal M_2: \text{logit} (\mathbf p_{t}) = \beta_0 + \beta_1 \mathbf X_{1} + \beta_2 \mathbf X_{2} + \beta_3 \mathbf X_{3} + \mathbf f(t) + \boldsymbol \varepsilon_t$$
+where $\mathbf f(t)$ is a linear combination of natural cubic spline basis functions for the *time* variable with $10$ degrees of freedom. I chose $df = 10$ because there are $10$ months in the dataset and because the observed proportion of districts not operating fully in person is very non-linear. Like before, $\mathbf X_{1}, \mathbf X_{2}, \mathbf X_{3}$ are indicators for the Northeast, South, and West Census regions.
 
-# Conclusion
+Using a Likelihood Ratio Test, I compared the full version of the model to a reduced version of the model without indicators for the different Census regions. This tests the null hypothesis of having the same intercept and slopes regardless of region. With a p-value of $p < 0.0001$, there is strong enough evidence to reject the null hypothesis. At least one of the Census regions has an intercept and/or predictor effect that is significantly different from that of the other Census regions. This full model has an AIC of $75,416.5$. Some of the parameters have p-values less than $0.05$, but they do not have a very intuitive intepretation.
+
+I also assessed how well the two models fit by estimating the weekly probability of not operating fully in person for the average district within each Census region. For each Census region, I compared the estimated probabilities with the actual weekly proportions of districts not operating fully in person.
+
+![Model Predictions by Region](model_comparisons.png){width=500px}
+
 
 
 \newpage
@@ -99,9 +99,9 @@ regionWest & 0.19967  &  0.34891 &  0.572 & 0.567142 \\
 ## Data
 \begin{table}[H]\begin{center}
 \caption{{\bf Sample Data}}\label{t:data}
-\begin{tabular}{l|ccccccccc}
+\begin{tabular}{l|ccccccc}
 \hline
-ID & week & learning modality & state & vaccines per 100k & time & cases per 100k & deaths per 100k & students per school & region \\ \hline
+ID & week & learning modality & state & vaccines per 100k & cases per 100k & students per school & region \\ \hline
 \hline
 \end{tabular} 
 \end{center}

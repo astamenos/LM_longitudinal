@@ -14,22 +14,6 @@ get_data <- function(domain, identifier, limit = 50000, offset = 0, date_query) 
   return(data)
 }
 
-region_viz <- function(y, linesize = 1, pointsize = 2, 
-                       colors = c('darkgoldenrod3', 'steelblue', 'darkred', 'aquamarine3')) {
-  ggplot(regional) + 
-    geom_rect(aes(xmin = as.POSIXct("2021-12-01"), xmax = as.POSIXct("2022-02-01"), 
-                  ymin = 0, ymax = Inf), fill = "grey90", 
-              alpha = 0.2, col = "grey90", inherit.aes = FALSE) +
-    geom_line(aes(x = week, y = !!ensym(y), color = region), size = linesize) +
-    geom_point(aes(x = week, y = pct_disrupted, color = region, shape = region), size = pointsize) +
-    scale_color_manual(values = colors) +
-    labs(x = 'Date', y = 'Probability of Disruption (%)', 
-         title = sprintf('%s Estimated Probability of School Disruption by Region', 
-                         str_to_title(strsplit(y, '_')[[1]][1]))) +
-    theme_light()
-  
-}
-
 model_viz <- function(region, size = 1.1) {
   ggplot(regional[regional$region == region,]) +
     geom_rect(aes(xmin = as.POSIXct("2021-12-01"), 
@@ -43,12 +27,15 @@ model_viz <- function(region, size = 1.1) {
     geom_line(aes(x = week, y = model2_probs, 
                   linetype = 'Model 2', color = 'Model 2'), 
               size = size) +
+    geom_line(aes(x = week, y = pct_disrupted,
+                  linetype = 'Actual', color = 'Actual'), 
+              size = size) +
     geom_point(aes(x = week, y = pct_disrupted)) +
     labs(x = 'Date', y = 'Probability of Disruption', 
          title = sprintf('%s: Observed and Estimated Probability of School Disruption', 
                          str_to_sentence(region)),
          linetype = 'Legend', color = 'Legend') +
-    scale_color_manual(values = c('#a6611a', '#018571')) +
+    scale_color_manual(values = c('black', '#a6611a', '#018571')) +
     theme_light()
 }
 
@@ -123,7 +110,11 @@ df <- lm_df %>%
          cases_per_100k = 100000 * new_case / POPESTIMATE2021,
          deaths_per_100k = 100000 * new_death / POPESTIMATE2021,
          students_per_school = student_count / operational_schools) %>%
+  group_by(district_nces_id) %>%
+  mutate(lag_total_vaccines_per_100k = lag(total_vaccines_per_100k, order_by = week),
+         lag_cases_per_100k = lag(cases_per_100k, order_by = week),
+         lag_deaths_per_100k = lag(deaths_per_100k, order_by = week)) %>%
   select(district_nces_id, district_name, week, learning_modality,
-         operational_schools, student_count, city, state, zip_code, total_vaccines_per_100k,
-         time, cases_per_100k, deaths_per_100k, students_per_school, region) %>%
+         operational_schools, student_count, state, lag_total_vaccines_per_100k,
+         time, lag_cases_per_100k, lag_deaths_per_100k, students_per_school, region) %>%
   drop_na(operational_schools, student_count)
