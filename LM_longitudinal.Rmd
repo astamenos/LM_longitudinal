@@ -20,39 +20,41 @@ knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
 ```
 
 \newpage
-
+\setlength\parindent{40pt}
 # Data Collection Protocol
+\vspace{-3truemm}
+For my analysis, I fit different specifications of a logistic regression model to understand the effect of public health trends on the estimated probability of disruptions to in-person learning during the 2021-2022 school year. The data was collected to help the Centers for Disease Control and Prevention (CDC), the Department of Education, and the White House assess how schools were operating during the COVID-19 pandemic (Parks et al, 2021). For the purpose of this assessment, CDC used the following definitions for school learning modalities (CDC, 2022):
+\vspace{-3truemm}
 
-For my analysis, I fit different specifications of a logistic regression model to understand the effect of public health trends and time on the estimated probability of disruptions to in-person learning during the 2021-2022 school year. The data was collected to help the Department of Health and Human Services, the Department of Education, and the White House assess how schools were operating during the COVID-19 pandemic (___, ). For the purpose of this assessment, HHS used the following definitions for school learning modalities:
+* **In-Person**: "All schools within the district offer face-to-face instruction 5 days per week to all students at all available grade levels"
+* **Remote**: "Schools within the district do not offer face-to-face instruction; all learning is conducted online/remotely to all students at all available grade levels"
+* **Hybrid**: "Schools within the district offer a combination of in-person and remote learning; face-to-face instruction is offered less than 5 days per week, or only to a subset of students"
 
-* *In-Person*: All schools within the district offer face-to-face instruction 5 days per week to all students at all available grade levels
-* *Remote*: Schools within the district do not offer face-to-face instruction; all learning is conducted online/remotely to all students at all available grade levels
-* *Hybrid*: Schools within the district offer a combination of in-person and remote learning; face-to-face instruction is offered less than 5 days per week, or only to a subset of students
-
+\vspace{-2truemm}
 For my analysis, I combined "remote" and "hybrid" into a single category, where $1$ denotes "not operating fully in person" and $0$ denotes "operating fully in person". The dataset contains information about approximately $14,500$ K-12 public and independent charter school districts in the U.S. This is a longitudinal dataset covering the school years between August 2021 and December 2022. It contains weekly estimates of how each school district was operating (e.g., fully in person, fully remotely, or in a hybrid setting). In addition to learning modality estimates, the dataset contains information about the number of schools within each school district and the total number of students throughout the district. Some school districts contain a single school, whereas other districts contain multiple schools.
 
-Based on the National Center for Educational Statistics (NCES, 20xx), throughout the country, there are more than $17,000$ school districts that meet this definition. Clearly, the school districts included in the learning modalities dataset constitute just a subset of all U.S. public and independent charter school districts. This subset was carefully selected by choosing a mixture of rural and urban districts in order to strike a balance between a representative sample and a sample of large districts that accounts for as many students as possible. Since the data collection period started, Burbio and MCH, a couple of third-party contractors working for HHS, have been reaching out to school districts each week and asking them a set of questions to identify their learning modalities.
+Based on the National Center for Educational Statistics metadata file for the previous school year (NCES, 2021), throughout the country, there are more than $17,000$ school districts that meet this definition. Clearly, the school districts included in the learning modalities dataset constitute just a subset of all U.S. public and independent charter school districts. This subset was carefully selected by choosing a mixture of rural and urban districts in order to strike a balance between a representative sample and a sample of large districts that accounts for as many students as possible (). Since the data collection period started, Burbio and MCH, a couple of third-party contractors working for HHS, have been reaching out to school districts each week and administered surveys to identify their learning modalities (Parks et al, 2021).
 
-There are some districts that only one third-party contractor covers, but there are also some districts that both contractors cover. A Hidden Markov Model (HMM) was used to integrate the different sources of information and estimate the most likely learning modality whenever there is conflicting information in the data sources (, 202x). In other words, the learning modality estimates in this dataset are the output of a probabilistic model, so they may not be $100\%$ accurate, but they do an adequate job of describing school district operations during the pandemic. For the purposes of this paper, the output of the HMM is the input to my analysis.
-
-In addition to the learning modality dataset, I also imported state-level vaccination data from (), case and death data from (), and population estimate data from ___. I did some preprocessing to make sure that the different input datasets are comparable (e.g., time series have weekly frequency, rates are per capita, ).
-The school learning modality data comes from an observational study, since there is no random assignment of treatments.
-
-Potential confounders: ventilation and air flow, physical size of school building (i.e., are students able to sit far enough apart), 
-
-# The Statistical Analysis
-
-![Analysis of Missingness](missingness.png){width=500px}
+A Hidden Markov Model (HMM) was used to integrate the different sources of information and estimate the most likely learning modality whenever there is conflicting information in the data sources (Parks et al, 2021). In other words, the learning modality estimates in this dataset are the output of a probabilistic model, so they may not be $100\%$ accurate, but they do an adequate job of describing school district operations during the pandemic. For the purposes of this paper, the output of the HMM is the input to my analysis. In addition to the learning modality dataset, I also imported state-level pediatric vaccination data (from CDC, 2021), COVID case data (from CDC, 2020), and 2021 population estimates (from Census Bureau, 2021). I did some preprocessing to make sure that the different input datasets are comparable (e.g., time series have weekly frequency, rates are per capita, etc).
 
 Most districts (approximately $81\%$) reported data for $100\%$ of the weeks in the 2021-2022 school year, but some districts had data missing for up to $97.73\%$ of the school year. Missingness may be happening at random, or there might be a systematic reason for the missing data. For example, districts that are not operating fully in person may be less likely to respond, in which case there would be under-reporting of "remote" and "hybrid" learning modalities. For this analysis, I only considered the $12,015$ districts that had no missing data, but further research should address how to deal with the missingness.
 
+\vspace{-5truemm}
+![Analysis of Missingness](missingness.png){width=500px}
+
+The school learning modality data comes from an observational study, since there is no random assignment of treatments.
+
+Potential confounders: ventilation and air flow, physical size of school building (i.e., are students able to sit far enough apart).
+
 Unperceived characteristics in different Census regions (e.g., political ideology, attitude toward public health and COVID restrictions, differences in local education laws, etc).
 
-$\mathcal{M}_1: \text{logit} (\mathbf p_{t}) = \beta_0 + \beta_1 \mathbf X_{1} + \beta_2 \mathbf X_{2} + \beta_3 \mathbf X_{3} + \beta_4 \mathbf X_{4} + \beta_5 \mathbf X_{t - 1, 5} + \beta_6 \mathbf X_{t - 1, 6} + \sum_{j = 7}^{15} \beta_j \mathbf Z_j + \boldsymbol \varepsilon_t$
+# The Statistical Analysis 
+\vspace{-7truemm}
+$$\mathcal{M}_1: \text{logit} (\mathbf p_{t}) = \beta_0 + \beta_1 \mathbf X_{1} + \beta_2 \mathbf X_{2} + \beta_3 \mathbf X_{3} + \beta_4 \mathbf X_{4} + \beta_5 \mathbf X_{t - 1, 5} + \beta_6 \mathbf X_{t - 1, 6} + \sum_{j = 7}^{15} \beta_j \mathbf Z_j + \boldsymbol \varepsilon_t$$ \vspace{-4truemm}
 
 where $\mathbf X_{1}, \mathbf X_{2}, \mathbf X_{3}$ are indicators for three of the census regions, $\mathbf X_{4}$ is the ratio of students to schools, $\mathbf X_{t - 1, 5}, \mathbf X_{t - 1, 6}$ are the values of some public health metrics during the previous week. The $\mathbf Z_j$ are the $9 (= 3 \cdot 3)$ interaction terms between the three Census indicators and the three continuous variables.
 
-Using a Likelihood Ratio Test, I compared the full version of the model to a reduced version of the model without indicators for the different Census regions. This tests the null hypothesis of having the same intercept and slopes regardless of region. With a p-value of $p < 0.0001$, there is strong enough evidence to reject the null hypothesis. At least one of the Census regions has an intercept and/or predictor effect that is significantly different from that of the other Census regions. This full model has an AIC of $75,003.71$. All of the parameters except for $\beta_1$ (the difference in coefficients for the Midwest and the Northeast) and $\beta_11$ (the difference in the effect of *lag_cases_per_100k* in the Midwest and the South) have p-values much smaller than $0.05$. Here are the estimated parameters for the four Census regions. Although there are noticeable regional differences in the magnitude of the estimated parameters, the signs remain the same from region to region.
+Using a Likelihood Ratio Test, I compared the full version of the model to a reduced version of the model without indicators for the different Census regions. This tests the null hypothesis of having the same intercept and slopes regardless of region. With a p-value of $p < 0.0001$, there is strong enough evidence to reject the null hypothesis. At least one of the Census regions has an intercept and/or predictor effect that is significantly different from that of the other Census regions. This full model has an AIC of $75,003.71$. All of the parameters except for $\beta_1$ (the difference in coefficients for the Midwest and the Northeast) and $\beta_{11}$ (the difference in the effect of *lag_cases_per_100k* in the Midwest and the South) have p-values much smaller than $0.05$. Here are the estimated parameters for the four Census regions. Although there are noticeable regional differences in the magnitude of the estimated parameters, the signs remain the same from region to region.
 
 \begin{table}[H]\begin{center}
 \caption{{\bf Results of Model 1}}\label{t:model1}
@@ -67,13 +69,14 @@ West & -3.819821 & 0.000047 & 0.000539 & -0.000052 \\
 \end{tabular} 
 \end{center}
 \end{table}
-
+\vspace{-1truemm}
 $$\mathcal M_2: \text{logit} (\mathbf p_{t}) = \beta_0 + \beta_1 \mathbf X_{1} + \beta_2 \mathbf X_{2} + \beta_3 \mathbf X_{3} + \mathbf f(t) + \boldsymbol \varepsilon_t$$
+\vspace{-1truemm}
 where $\mathbf f(t)$ is a linear combination of natural cubic spline basis functions for the *time* variable with $10$ degrees of freedom. I chose $df = 10$ because there are $10$ months in the dataset and because the observed proportion of districts not operating fully in person is very non-linear. Like before, $\mathbf X_{1}, \mathbf X_{2}, \mathbf X_{3}$ are indicators for the Northeast, South, and West Census regions.
 
 Using a Likelihood Ratio Test, I compared the full version of the model to a reduced version of the model without indicators for the different Census regions. This tests the null hypothesis of having the same intercept and slopes regardless of region. With a p-value of $p < 0.0001$, there is strong enough evidence to reject the null hypothesis. At least one of the Census regions has an intercept and/or predictor effect that is significantly different from that of the other Census regions. This full model has an AIC of $75,416.5$. Some of the parameters have p-values less than $0.05$, but they do not have a very intuitive intepretation.
 
-I also assessed how well the two models fit by estimating the weekly probability of not operating fully in person for the average district within each Census region. For each Census region, I compared the estimated probabilities with the actual weekly proportions of districts not operating fully in person.
+I also assessed how well the two models fit by estimating the weekly probability of not operating fully in person for the average district within each Census region. For each Census region, I compared the estimated probabilities with the actual weekly proportions of districts not operating fully in person. Although $\mathcal M_1$ has a lower AIC, the following figure shows that, at least for a district with average values for all the continuous predictors, the curves from $\mathcal M_2$ more closely approximate the actual proportion of school disruptions. However, even $\mathcal M_1$ does not fully capture the rapid increase in the proportion of school disruptions during the January Omicron surge.
 
 ![Model Predictions by Region](model_comparisons.png){width=500px}
 
@@ -82,19 +85,23 @@ I also assessed how well the two models fit by estimating the weekly probability
 \newpage
 
 # Appendix
+## References
+
+* Centers for Disease Control and Prevention (2020). *United States COVID-19 Cases and Deaths by State over Time - ARCHIVED* (data.cdc.gov version) [data file]. Centers for Disease Control and Prevention [distributor]. 
+Retrieved from https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36 on December 2, 2022
+* ———— (2021). *COVID-19 Vaccinations in the United States,Jurisdiction* (data.cdc.gov version) [data file]. Centers for Disease Control and Prevention [distributor]. 
+Retrieved from https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-Jurisdi/unsk-b7fc on December 2, 2022
+* ———— (2022). *School Learning Modalities* (HealthData.gov version) [data file]. United States Department of Health and Human Services [distributor]. Retrieved from https://healthdata.gov/National/School-Learning-Modalities/aitj-yx37 on December 2, 2022
+* National Center for Educational Statistics (2021). *2020-2021 Local Education Agency (School District) Universe Survey Data, v.1a—Provisional* (nces.ed.gov edition) [data file]. National Center for Educational Statistics [distributor]. 
+Retrieved from https://nces.ed.gov/programs/edge/Geographic/SchoolLocations on December 2, 2022
+* Parks SE, Zviedrite N, Budzyn SE, et al. (2021). "COVID-19–Related School Closures and Learning Modality Changes — United States, August 1–September 17, 2021," *MMWR Morb Mortal Wkly Rep* [online]. 70:1374–1376. DOI: http://dx.doi.org/10.15585/mmwr.mm7039e2
+* United States Census Bureau, (2021). *Annual Population Estimates, Estimated Components of Resident Population Change, and Rates of the Components of Resident Population Change for the United States, States, District of Columbia, and Puerto Rico: April 1, 2020 to July 1, 2021* (NST-EST2021-ALLDATA) [data file]. United States Census Bureau [publisher].
+Retrieved from https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html#par_textimage on December 2, 2022
+
 ## R Code
 ``` {r yada, warning = FALSE, message = FALSE}
 
 ```
-
-## References
-
-* https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36
-* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4241048/
-* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3016756/
-* https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html#par_textimage
-* https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-Jurisdi/unsk-b7fc
-* https://healthdata.gov/National/School-Learning-Modalities/aitj-yx37
 
 ## Data
 \begin{table}[H]\begin{center}
