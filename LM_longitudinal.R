@@ -25,7 +25,10 @@ ggplot(pivot) +
     axis.text.y = element_blank(),  # Remove y axis labels
     legend.background = element_rect(color = 'black',
                                      size = 1.1),
-    legend.position = c(0.85, 0.85)
+    legend.position = c(0.85, 0.85),
+    plot.title = element_text(size = 22),
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16)
   ) +
   labs(x = 'Week', y = 'District', 
        title = 'Visualization of Missingness by District and Week',
@@ -53,8 +56,7 @@ regional <- df %>%
             lag_total_vaccines_per_100k = mean(lag_total_vaccines_per_100k),
             students_per_school = mean(students_per_school),
             lag_cases_per_100k = mean(lag_cases_per_100k),
-            lag_deaths_per_100k = mean(lag_deaths_per_100k),
-            lag_learning_modality = mean(lag_learning_modality)) %>% 
+            lag_deaths_per_100k = mean(lag_deaths_per_100k)) %>% 
   mutate(time = as.numeric(as.Date(week) - min(as.Date(week))))
 
 # Graphing the regional learning modality data
@@ -119,4 +121,3 @@ chart_northeast <- model_viz('Northeast')
 chart_south <- model_viz('South')
 
 grid.arrange(chart_west, chart_midwest, chart_northeast, chart_south, nrow = 2)
-
